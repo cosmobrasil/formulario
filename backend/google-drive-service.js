@@ -4,23 +4,38 @@
 const fs = require('fs');
 const path = require('path');
 
-// Carregar credenciais OAuth
-const clientSecretPath = path.join(__dirname, '..', 'client_secret_1013653365990-ui04jq5na330791qg3e232vkhsm8d70v.apps.googleusercontent.com.json');
+// Carregar credenciais OAuth de variáveis de ambiente (produção) ou arquivo local
 let clientSecret;
 
-try {
-    const clientSecretFile = fs.readFileSync(clientSecretPath, 'utf8');
-    clientSecret = JSON.parse(clientSecretFile);
-    console.log('✅ Credenciais Google carregadas');
-} catch (error) {
-    console.error('❌ Erro ao carregar client_secret:', error.message);
+// Tenta carregar de variáveis de ambiente primeiro
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    clientSecret = {
+        web: {
+            client_id: process.env.GOOGLE_CLIENT_ID,
+            client_secret: process.env.GOOGLE_CLIENT_SECRET
+        }
+    };
+    console.log('✅ Credenciais Google carregadas (variáveis de ambiente)');
+} else {
+    // Fallback: tenta carregar de arquivo local (desenvolvimento)
+    try {
+        const clientSecretPath = path.join(__dirname, '..', 'client_secret_1013653365990-ui04jq5na330791qg3e232vkhsm8d70v.apps.googleusercontent.com.json');
+        if (fs.existsSync(clientSecretPath)) {
+            const clientSecretFile = fs.readFileSync(clientSecretPath, 'utf8');
+            clientSecret = JSON.parse(clientSecretFile);
+            console.log('✅ Credenciais Google carregadas (arquivo local)');
+        }
+    } catch (error) {
+        console.warn('⚠️ Google credentials não encontradas - Drive não será configurado');
+    }
 }
 
 class GoogleDriveService {
     constructor() {
         this.clientId = clientSecret?.web?.client_id;
         this.clientSecret = clientSecret?.web?.client_secret;
-        this.redirectUri = 'http://localhost:3000/auth/google/callback';
+        // Usar redirect URI dinâmico baseado em variável de ambiente ou localhost
+        this.redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/auth/google/callback';
         this.refreshToken = null;
         this.accessToken = null;
         this.tokenExpiry = null;
