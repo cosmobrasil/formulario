@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Callback - CosmoBrasil 2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full text-center">
+            <div class="text-5xl mb-6" id="statusIcon">⏳</div>
+            <h1 class="text-2xl font-bold text-gray-900 mb-4" id="statusTitle">Processando Autenticação</h1>
+            <p class="text-gray-600 mb-6" id="statusMessage">Aguardando retorno do Google...</p>
+            <div id="successSection" class="hidden">
+                <button onclick="window.close()" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors mr-2">
+                    Fechar Janela
+                </button>
+                <button onclick="window.opener.location.reload()" class="px-6 py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition-colors">
+                    Recarregar Principal
+                </button>
+            </div>
+            <div id="errorSection" class="hidden">
+                <button onclick="window.history.back()" class="px-6 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors">
+                    Tentar Novamente
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() {
+            try {
+                // Extract access token from URL hash
+                const hash = window.location.hash;
+                console.log('Hash received:', hash);
+                
+                if (hash) {
+                    const params = new URLSearchParams(hash.substring(1));
+                    const accessToken = params.get('access_token');
+                    const error = params.get('error');
+                    
+                    if (accessToken) {
+                        // Save token to localStorage
+                        localStorage.setItem('google_drive_token', accessToken);
+                        
+                        // Update UI for success
+                        document.getElementById('statusIcon').textContent = '✅';
+                        document.getElementById('statusTitle').textContent = 'Autenticado com Sucesso!';
+                        document.getElementById('statusTitle').className = 'text-2xl font-bold text-green-600 mb-4';
+                        document.getElementById('statusMessage').textContent = 'Agora você pode salvar relatórios diretamente no Google Drive.';
+                        document.getElementById('successSection').classList.remove('hidden');
+                        
+                        console.log('✅ Access token saved successfully');
+                        
+                        // Optionally notify the parent window
+                        if (window.opener && window.opener.handleGoogleAuthSuccess) {
+                            window.opener.handleGoogleAuthSuccess(accessToken);
+                        }
+                        
+                    } else if (error) {
+                        throw new Error(`Google OAuth error: ${error}`);
+                    } else {
+                        throw new Error('No access token received');
+                    }
+                } else {
+                    throw new Error('No hash fragment in URL');
+                }
+                
+            } catch (error) {
+                console.error('❌ Authentication error:', error);
+                
+                // Update UI for error
+                document.getElementById('statusIcon').textContent = '❌';
+                document.getElementById('statusTitle').textContent = 'Erro na Autenticação';
+                document.getElementById('statusTitle').className = 'text-2xl font-bold text-red-600 mb-4';
+                document.getElementById('statusMessage').textContent = error.message;
+                document.getElementById('errorSection').classList.remove('hidden');
+            }
+        };
+    </script>
+</body>
+</html>

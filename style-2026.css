@@ -1,0 +1,147 @@
+/* Estilos adicionais para o Questionário de Circularidade 2.0 - 2026 */
+/* Tema laranja em vez de azul */
+
+/* Animações de transição */
+.termos-container {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Estilos para radio buttons customizados - tema laranja */
+input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d1d5db;
+    cursor: pointer;
+}
+
+input[type="radio"]:checked {
+    background-color: #ea580c; /* Laranja-600 */
+    border-color: #ea580c;
+}
+
+/* Hover effect nos labels - tema laranja */
+label:hover {
+    background-color: #fff7ed; /* Laranja-50 */
+}
+
+/* Estilos para o checkbox de termos */
+input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+input[type="checkbox"]:checked {
+    background-color: #ea580c;
+    border-color: #ea580c;
+}
+
+/* Scrollbar customizada */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #ea580c;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #c2410c; /* Laranja-700 */
+}
+
+/* Efeito de loading - tema laranja */
+.loading-spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #ea580c;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Cores de fundo e botões - tema laranja */
+.bg-primary {
+    background-color: #ea580c;
+}
+
+.hover\:bg-primary:hover {
+    background-color: #c2410c;
+}
+
+.text-primary {
+    color: #ea580c;
+}
+
+.border-primary {
+    border-color: #ea580c;
+}
+
+/* Alertas e mensagens - tema laranja */
+.bg-orange-50 {
+    background-color: #fff7ed;
+}
+
+.border-orange-200 {
+    border-color: #fed7aa;
+}
+
+.text-orange-800 {
+    color: #9a3412;
+}
+
+.text-orange-900 {
+    color: #7c2d12;
+}
+
+/* Progress bar - tema laranja */
+.progress-bar {
+    background-color: #ea580c;
+}
+
+.bg-orange-100 {
+    background-color: #ffedd5;
+}
+
+/* Responsividade adicional */
+@media (max-width: 640px) {
+    .max-w-6xl,
+    .max-w-4xl,
+    .max-w-3xl {
+        padding: 1rem;
+    }
+    
+    h1, h2 {
+        font-size: 1.5rem;
+    }
+}
+
+/* Estilos específicos para 2026 */
+.version-badge {
+    background-color: #ea580c;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}

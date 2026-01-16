@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autenticação Google Drive - CosmoBrasil 2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full">
+            <div class="text-center">
+                <div class="text-5xl mb-6">🔒</div>
+                <h1 class="text-2xl font-bold text-gray-900 mb-4">Autenticação Google Drive</h1>
+                <p class="text-gray-600 mb-6">
+                    Conecte sua conta Google para salvar os relatórios diretamente no Google Drive.
+                </p>
+                
+                <div id="authSection">
+                    <button id="loginButton" class="w-full px-6 py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition-colors mb-4">
+                        Conectar com Google
+                    </button>
+                    <p class="text-xs text-gray-500">
+                        Isso permitirá salvar todos os relatórios na pasta<br>
+                        <strong>"Relatorios_Circularidade_2026"</strong> do seu Drive
+                    </p>
+                </div>
+                
+                <div id="successSection" class="hidden">
+                    <div class="text-4xl mb-4">✅</div>
+                    <h2 class="text-xl font-bold text-green-600 mb-2">Conectado com Sucesso!</h2>
+                    <p class="text-gray-600 mb-6">Agora os relatórios serão salvos automaticamente no Google Drive.</p>
+                    <button onclick="window.close()" class="px-6 py-3 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition-colors">
+                        Fechar
+                    </button>
+                </div>
+                
+                <div id="errorSection" class="hidden">
+                    <div class="text-4xl mb-4">❌</div>
+                    <h2 class="text-xl font-bold text-red-600 mb-2">Erro na Autenticação</h2>
+                    <p class="text-gray-600 mb-6" id="errorMessage">Ocorreu um erro durante a autenticação.</p>
+                    <button onclick="location.reload()" class="px-6 py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition-colors">
+                        Tentar Novamente
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Handle authentication callback
+        window.onload = function() {
+            // Check if we received an access token
+            const hash = window.location.hash;
+            if (hash) {
+                const params = new URLSearchParams(hash.substring(1));
+                const accessToken = params.get('access_token');
+                
+                if (accessToken) {
+                    // Save token to localStorage
+                    localStorage.setItem('google_drive_token', accessToken);
+                    
+                    // Show success
+                    document.getElementById('authSection').classList.add('hidden');
+                    document.getElementById('successSection').classList.remove('hidden');
+                }
+            }
+        };
+        
+        // Login button handler
+        document.getElementById('loginButton').addEventListener('click', function() {
+            // In a real implementation, you would redirect to Google OAuth
+            // For now, we'll simulate the process
+            
+            // This is a simplified version - in production, you'd use the actual OAuth flow
+            alert('Em produção, isso redirecionaria para a autenticação do Google.\n\nPara testes, você pode fechar esta janela e continuar usando o sistema normalmente.');
+            
+            // For demo purposes, hide auth section
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('successSection').classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>
