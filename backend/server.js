@@ -62,6 +62,18 @@ app.get('/api/health', async (req, res) => {
     }
 });
 
+// Função para limpar CNPJ (remover formatação)
+function limparCNPJ(cnpj) {
+    if (!cnpj) return '';
+    return cnpj.replace(/\D/g, ''); // Remove tudo que não é dígito
+}
+
+// Função para limpar celular (remover formatação)
+function limparCelular(celular) {
+    if (!celular) return '';
+    return celular.replace(/\D/g, ''); // Remove tudo que não é dígito
+}
+
 // Endpoint para salvar questionário
 app.post('/api/questionario', async (req, res) => {
     const client = await pool.connect();
@@ -70,11 +82,22 @@ app.post('/api/questionario', async (req, res) => {
 
         const { empresa, respostas, pontuacao, relatorioHtml } = req.body;
 
-        // 1. Verificar se empresa já existe pelo CNPJ
+        // Limpar CNPJ e celular
+        const cnpjLimpo = limparCNPJ(empresa.cnpj);
+        const celularLimpo = limparCelular(empresa.celular);
+
+        console.log('📝 Dados recebidos:', {
+            cnpjOriginal: empresa.cnpj,
+            cnpjLimpo: cnpjLimpo,
+            celularOriginal: empresa.celular,
+            celularLimpo: celularLimpo
+        });
+
+        // 1. Verificar se empresa já existe pelo CNPJ limpo
         let empresaId;
         const existingEmpresa = await client.query(
             'SELECT id FROM empresas WHERE cnpj = $1',
-            [empresa.cnpj]
+            [cnpjLimpo]
         );
 
         if (existingEmpresa.rows.length > 0) {
@@ -82,18 +105,18 @@ app.post('/api/questionario', async (req, res) => {
             empresaId = existingEmpresa.rows[0].id;
             console.log('📌 Empresa já cadastrada, reutilizando ID:', empresaId);
         } else {
-            // Nova empresa - inserir
+            // Nova empresa - inserir com dados limpos
             const empresaResult = await client.query(
                 `INSERT INTO empresas (nome_empresa, cnpj, nome_responsavel, email, cidade, celular, setor_economico, produto_avaliado)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  RETURNING id`,
                 [
                     empresa.nomeEmpresa,
-                    empresa.cnpj,
+                    cnpjLimpo,
                     empresa.nomeResponsavel,
                     empresa.email,
                     empresa.cidade,
-                    empresa.celular,
+                    celularLimpo,
                     empresa.setorEconomico,
                     empresa.produtoAvaliado
                 ]
@@ -143,7 +166,7 @@ app.post('/api/questionario', async (req, res) => {
         if (driveService.isAuthenticated() && relatorioHtml) {
             try {
                 console.log('💾 Salvando relatório no Google Drive...');
-                const fileName = `Relatorio_${empresa.nomeEmpresa.replace(/\s+/g, '_')}_${Date.now()}.html`;
+                const fileName = `Relatorio_${empresa.nomeEmpresa.replace(/\s+/g, '_')}_${Date.now()}.doc`;
                 const driveResult = await driveService.saveFile(
                     relatorioHtml,
                     fileName,
