@@ -242,6 +242,11 @@ app.get('/api/drive/status', (req, res) => {
 
 // Obter URL de autorização
 app.get('/api/drive/auth-url', (req, res) => {
+    // Debug log para ver o que está sendo gerado
+    console.log('🔍 Gerando URL de auth...');
+    console.log('ID do Cliente:', driveService.clientId ? driveService.clientId.substring(0, 10) + '...' : 'NÃO DEFINIDO');
+    console.log('Redirect URI:', driveService.redirectUri);
+
     if (driveService.isAuthenticated()) {
         return res.json({
             alreadyAuthenticated: true,
@@ -250,9 +255,27 @@ app.get('/api/drive/auth-url', (req, res) => {
     }
 
     const authUrl = driveService.getAuthUrl();
+    console.log('🔗 URL Gerada:', authUrl); // Verifique nos logs do Railway se o client_id está correto aqui
+
     res.json({
         authUrl: authUrl,
         message: 'Abra esta URL no navegador para autorizar'
+    });
+});
+
+// Endpoint de Diagnóstico (Temporário)
+app.get('/api/debug/config', (req, res) => {
+    res.json({
+        env: {
+            GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? 'DEFINIDO (' + process.env.GOOGLE_CLIENT_ID.substring(0, 5) + '...)' : 'NÃO DEFINIDO',
+            GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? 'DEFINIDO' : 'NÃO DEFINIDO',
+            RAILWAY_STATIC_URL: process.env.RAILWAY_STATIC_URL
+        },
+        driveService: {
+            clientIdLoaded: driveService.clientId ? 'SIM (' + driveService.clientId.substring(0, 5) + '...)' : 'NÃO',
+            redirectUri: driveService.redirectUri,
+            isAuthenticated: driveService.isAuthenticated()
+        }
     });
 });
 
