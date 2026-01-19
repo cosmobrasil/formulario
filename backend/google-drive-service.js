@@ -34,8 +34,19 @@ class GoogleDriveService {
     constructor() {
         this.clientId = clientSecret?.web?.client_id;
         this.clientSecret = clientSecret?.web?.client_secret;
-        // Usar redirect URI dinâmico baseado em variável de ambiente ou localhost
-        this.redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/auth/google/callback';
+        // Usar redirect URI dinâmico baseado em variável de ambiente ou public URL
+        if (process.env.GOOGLE_REDIRECT_URI) {
+            this.redirectUri = process.env.GOOGLE_REDIRECT_URI;
+        } else if (process.env.RAILWAY_STATIC_URL) {
+            this.redirectUri = `https://${process.env.RAILWAY_STATIC_URL}/auth/google/callback`;
+        } else if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT) {
+            // Fallback seguro para a URL informada
+            this.redirectUri = 'https://formulario-production-8df7.up.railway.app/auth/google/callback';
+        } else {
+            this.redirectUri = 'http://localhost:3000/auth/google/callback';
+        }
+
+        console.log('🔗 Redirect URI configurado:', this.redirectUri);
         this.refreshToken = null;
         this.accessToken = null;
         this.tokenExpiry = null;

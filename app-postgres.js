@@ -186,27 +186,13 @@
         }
     }
     
-    // Função para conectar ao PostgreSQL e salvar dados
+    // Função para conectar ao PostgreSQL e salvar dados VIA API BACKEND
     async function salvarDadosNoPostgreSQL() {
         try {
-            console.log('🔄 Salvando dados no PostgreSQL Railway...');
+            console.log('🔄 Enviando dados para o Backend API...');
             
             // Validar configuração
-            if (!DATABASE_CONFIG.host || !DATABASE_CONFIG.database) {
-                throw new Error('Configuração do PostgreSQL incompleta');
-            }
-            
-            // Preparar dados da empresa
-            const empresaData = {
-                nome_empresa: dados.empresa.nomeEmpresa,
-                cnpj: dados.empresa.cnpj,
-                nome_responsavel: dados.empresa.nomeResponsavel,
-                cidade: dados.empresa.cidade,
-                celular: dados.empresa.celular,
-                email: dados.empresa.email,
-                setor_economico: dados.empresa.setorEconomico,
-                produto_avaliado: dados.empresa.produtoAvaliado
-            };
+            const apiUrl = CONFIG.API_URL || '';
             
             // Calcular índices
             const { pontos, totalPossivel, percentual, maturidade } = calcularPontuacao();
@@ -216,44 +202,67 @@
                 acc[coluna] = dados.respostas[parseInt(id, 10)] || null;
                 return acc;
             }, {});
+
+            // Gerar relatório HTML para envio
+            const estagio = classificarEstagio(percentual);
+            const recs = gerarRecomendacoes(dados.respostas);
+            const potencial = 100 - percentual;
+            const dataStr = new Date().toLocaleString('pt-BR');
+            const idRelatorio = Math.floor(Math.random() * 1000) + 1;
             
-            const questionarioData = {
-                ...respostasMapeadas,
-                soma: pontos,
-                indice_global_circularidade: percentual,
-                indice_maturidade_estruturante: maturidade
+            const htmlEmail = construirHtmlEmailRelatorio({
+                empresa: dados.empresa,
+                percentual,
+                maturidade,
+                estagio,
+                grupos: calcularPontuacao().grupos,
+                recs,
+                dataStr,
+                idRelatorio,
+                pontos,
+                totalPossivel,
+                potencial
+            });
+            
+            // Dados completos para o backend
+            const payload = {
+                empresa: dados.empresa,
+                respostas: respostasMapeadas,
+                pontuacao: {
+                    pontos,
+                    percentual,
+                    maturidade
+                },
+                relatorioHtml: htmlEmail
             };
             
-            // Gerar UUID para a empresa
-            const empresaId = crypto.randomUUID ? crypto.randomUUID() : 
-                'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-                    return v.toString(16);
-                });
+            console.log('📋 Payload preparado:', { 
+                empresa: payload.empresa.nomeEmpresa, 
+                apiUrl 
+            });
             
-            // Adicionar ID à empresa
-            empresaData.id = empresaId;
-            
-            console.log('📋 Dados preparados:', { empresaData, questionarioData });
-            
-            // SIMULAÇÃO DE SALVAMENTO REAL
-            // Em produção, aqui iria a conexão real com PostgreSQL
-            // Para testes, vamos registrar no console e considerar sucesso
-            
-            console.log('✅ DADOS QUE SERIAM INSERIDOS NO POSTGRESQL:');
-            console.log('EMPRESA:', empresaData);
-            console.log('QUESTIONÁRIO:', questionarioData);
-            console.log('EMPRESA_ID GERADO:', empresaId);
-            
-            // Simular delay de processamento
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Retornar sucesso (em produção, isso viria após INSERT real)
-            console.log('✅ Dados salvos com sucesso no PostgreSQL (simulação)');
+            // Envio real para o backend
+            const response = await fetch(`${apiUrl}/api/questionario`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Erro na API: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('✅ Dados salvos com sucesso via API:', result);
             
             return {
-                empresaId: empresaId,
-                success: true
+                success: true,
+                driveSaved: result.driveSaved,
+                driveUrl: result.driveUrl,
+                empresaId: result.empresaId
             };
             
         } catch (error) {
@@ -266,60 +275,22 @@
         // Mostrar loading enquanto salva
         mostrarLoading();
         try {
-            // Salvar dados no PostgreSQL
+            // Salvar dados via API (PostgreSQL + Drive no backend)
             const result = await salvarDadosNoPostgreSQL();
             
             if (!result.success) {
-                throw new Error('Falha ao salvar dados no banco');
+                throw new Error('Falha ao salvar dados no backend');
             }
             
-            console.log('Dados salvos com sucesso no PostgreSQL!');
+            console.log('Processo de salvamento concluído.');
             
-            // Gerar relatório
-            const { pontos: p, totalPossivel: t, percentual: perc, grupos: grps, maturidade: mat } = calcularPontuacao();
-            const empresa = dados.empresa || {};
-            const data = new Date();
-            const dataStr = data.toLocaleString('pt-BR');
-            const idRelatorio = Math.floor(Math.random() * 1000) + 1;
-            const estagio = classificarEstagio(perc);
-            const recs = gerarRecomendacoes(dados.respostas);
-            const potencial = 100 - perc;
-            
-            const htmlEmail = construirHtmlEmailRelatorio({
-                empresa,
-                percentual: perc,
-                maturidade: mat,
-                estagio,
-                grupos: grps,
-                recs,
-                dataStr,
-                idRelatorio,
-                pontos: p,
-                totalPossivel: t,
-                potencial
-            });
-            
-            // Salvar relatório no Google Drive (silenciosamente)
-            let driveResult = null;
-            try {
-                // Tentar salvar silenciosamente no Google Drive
-                if (window.GoogleDriveIntegration) {
-                    driveResult = await window.GoogleDriveIntegration.saveReportSilently(
-                        htmlEmail, 
-                        empresa, 
-                        idRelatorio
-                    );
-                    
-                    if (driveResult) {
-                        console.log('💾 Relatório salvo automaticamente no Google Drive');
-                    }
-                }
-            } catch (driveError) {
-                console.warn('⚠️ Erro silencioso no Google Drive:', driveError);
-                // Nunca mostrar erro ao usuário - continuar normalmente
+            if (result.driveSaved) {
+                console.log('💾 Relatório salvo no Drive:', result.driveUrl);
+            } else {
+                console.warn('⚠️ Relatório foi salvo no banco, mas não no Drive (verifique o backend).');
             }
             
-            mostrarConfirmacao(driveResult);
+            mostrarConfirmacao(result);
             
         } catch (error) {
             console.error('Erro ao salvar dados:', error);

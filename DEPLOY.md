@@ -9,7 +9,7 @@
 
 ### Backend (Railway/Render/Heroku)
 - **Plataforma**: Railway (recomendado) ou Render/Heroku
-- **URL**: `https://cosmobrasil-questionario-backend.railway.app`
+- **URL**: `https://formulario-production-8df7.up.railway.app`
 - **Tecnologias**: Node.js + Express + PostgreSQL
 - **Arquivos**: backend/server.js, backend/google-drive-service.js
 

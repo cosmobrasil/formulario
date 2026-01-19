@@ -57,27 +57,40 @@
                 const accessToken = params.get('access_token');
                 
                 if (accessToken) {
-                    // Save token to localStorage
-                    localStorage.setItem('google_drive_token', accessToken);
+                    // Save token to localStorage (using key required by google-drive-silent.js)
+                    localStorage.setItem('gdrive_token_2026', accessToken);
                     
                     // Show success
                     document.getElementById('authSection').classList.add('hidden');
                     document.getElementById('successSection').classList.remove('hidden');
+                    
+                    // Optional: Close window after short delay
+                    setTimeout(() => {
+                        window.opener && window.opener.location.reload();
+                        // window.close(); 
+                    }, 2000);
                 }
             }
         };
         
         // Login button handler
         document.getElementById('loginButton').addEventListener('click', function() {
-            // In a real implementation, you would redirect to Google OAuth
-            // For now, we'll simulate the process
+            // Google Drive API Configuration
+            const CLIENT_ID = '1013653365990-ui04jq5na330791qg3e232vkhsm8d70v.apps.googleusercontent.com';
+            // Determine redirect URI based on current location
+            const REDIRECT_URI = window.location.href.split('#')[0]; // Current page
             
-            // This is a simplified version - in production, you'd use the actual OAuth flow
-            alert('Em produção, isso redirecionaria para a autenticação do Google.\n\nPara testes, você pode fechar esta janela e continuar usando o sistema normalmente.');
-            
-            // For demo purposes, hide auth section
-            document.getElementById('authSection').classList.add('hidden');
-            document.getElementById('successSection').classList.remove('hidden');
+            const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+
+            const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth' +
+                '?client_id=' + encodeURIComponent(CLIENT_ID) +
+                '&redirect_uri=' + encodeURIComponent(REDIRECT_URI) +
+                '&response_type=token' +
+                '&scope=' + encodeURIComponent(SCOPES) +
+                '&include_granted_scopes=true' +
+                '&state=pass-through-value';
+
+            window.location.href = authUrl;
         });
     </script>
 </body>

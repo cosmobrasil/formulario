@@ -5,7 +5,7 @@ window.QUESTIONARIO_CONFIG = {
     // Para produção no Netlify, o redirecionamento é feito pelo netlify.toml
     API_URL: (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
         ? 'http://localhost:3000'
-        : '', // Vazio usa o proxy do Netlify (configurado no netlify.toml)
+        : 'https://formulario-production-8df7.up.railway.app',
 
     // URL alternativa para produção direta (se necessário)
     // API_URL: 'https://cosmobrasil-questionario-backend.railway.app'
@@ -28,7 +28,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // GESTÃO DE RESÍDUOS - Q2
         {
             id: 2,
@@ -43,7 +43,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // SAÍDA DO PRODUTO (OUTPUT) - Q3
         {
             id: 3,
@@ -57,7 +57,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // SAÍDA DO PRODUTO (OUTPUT) - Q4
         {
             id: 4,
@@ -71,7 +71,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // SAÍDA DO PRODUTO (OUTPUT) - Q5
         {
             id: 5,
@@ -85,7 +85,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // SAÍDA DO PRODUTO (OUTPUT) - Q6
         {
             id: 6,
@@ -99,7 +99,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // VIDA DO PRODUTO - Q7
         {
             id: 7,
@@ -113,7 +113,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // VIDA DO PRODUTO - Q8
         {
             id: 8,
@@ -127,7 +127,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // VIDA DO PRODUTO - Q9
         {
             id: 9,
@@ -141,7 +141,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // MONITORAMENTO - Q10
         {
             id: 10,
@@ -156,7 +156,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // MONITORAMENTO - Q11
         {
             id: 11,
@@ -171,7 +171,7 @@ window.QUESTIONARIO_CONFIG = {
             ],
             obrigatoria: true
         },
-        
+
         // MONITORAMENTO - Q12
         {
             id: 12,
@@ -187,7 +187,7 @@ window.QUESTIONARIO_CONFIG = {
             obrigatoria: true
         }
     ],
-    
+
     // Mapeamento das respostas para os nomes das colunas do banco
     MAPEAMENTO_RESPOSTAS: {
         1: 'materia_prima',

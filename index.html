@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="style-2026.css">
 </head>
+
 <body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
-    
+
     <!-- Header -->
     <header class="bg-white shadow-md">
         <div class="max-w-6xl mx-auto px-6 py-4">
@@ -24,32 +26,39 @@
 
     <!-- Main Content -->
     <main class="max-w-6xl mx-auto px-6 py-8">
-        
+
         <!-- Tela de Termos de Uso -->
         <div id="termosScreen" class="termos-container">
             <div class="bg-white rounded-xl shadow-2xl p-8 max-w-4xl mx-auto">
-                <h1 class="text-3xl font-bold text-gray-900 mb-2">Pré-Diagnóstico sobre Circularidade de Produtos 2.0 - 2026</h1>
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">Pré-Diagnóstico sobre Circularidade de Produtos 2.0 -
+                    2026</h1>
                 <p class="text-sm text-gray-600 mb-8">📋 12 Questões • 🎯 4 Categorias • ⏱️ 10-15 min</p>
-                
+
                 <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
                     <h2 class="text-lg font-bold text-blue-900 mb-3">TERMOS DE USO</h2>
-                    
+
                     <div class="space-y-4 text-sm text-gray-700">
                         <div>
                             <h3 class="font-bold text-gray-900 mb-1">1. Limitações Legais</h3>
-                            <p>Este pré-diagnóstico não possui valor legal e não pode ser utilizado como ferramenta de certificação formal. Os resultados não constituem certificação oficial nem garantem conformidade com regulamentações específicas.</p>
+                            <p>Este pré-diagnóstico não possui valor legal e não pode ser utilizado como ferramenta de
+                                certificação formal. Os resultados não constituem certificação oficial nem garantem
+                                conformidade com regulamentações específicas.</p>
                         </div>
-                        
+
                         <div>
                             <h3 class="font-bold text-gray-900 mb-1">2. Finalidade</h3>
-                            <p>A finalidade é orientar as empresas na identificação de possíveis melhorias em seus processos de produção e práticas empresariais, fornecendo insights para desenvolvimento sustentável.</p>
+                            <p>A finalidade é orientar as empresas na identificação de possíveis melhorias em seus
+                                processos de produção e práticas empresariais, fornecendo insights para desenvolvimento
+                                sustentável.</p>
                         </div>
-                        
+
                         <div>
                             <h3 class="font-bold text-gray-900 mb-1">3. Base Metodológica</h3>
-                            <p>O objetivo principal do pré-diagnóstico é medir o grau de circularidade de um produto, com base em indicadores internacionais. A fonte dos indicadores internacionais pertence ao Centro Tecnológico Cosmob localizado na Itália.</p>
+                            <p>O objetivo principal do pré-diagnóstico é medir o grau de circularidade de um produto,
+                                com base em indicadores internacionais. A fonte dos indicadores internacionais pertence
+                                ao Centro Tecnológico Cosmob localizado na Itália.</p>
                         </div>
-                        
+
                         <div>
                             <h3 class="font-bold text-gray-900 mb-1">Privacidade dos Dados</h3>
                             <ul class="list-disc list-inside space-y-1 ml-4">
@@ -59,24 +68,29 @@
                                 <li>Você pode solicitar a exclusão dos seus dados a qualquer momento</li>
                             </ul>
                         </div>
-                        
+
                         <div class="bg-yellow-50 border border-yellow-200 rounded p-3 mt-4">
-                            <p class="text-xs text-yellow-800"><strong>Responsabilidades:</strong> CosmoBrasil não se responsabiliza por decisões tomadas. Usuário deve validar informações com especialistas.</p>
+                            <p class="text-xs text-yellow-800"><strong>Responsabilidades:</strong> CosmoBrasil não se
+                                responsabiliza por decisões tomadas. Usuário deve validar informações com especialistas.
+                            </p>
                         </div>
                     </div>
-                    
+
                     <div class="mt-6 p-4 bg-gray-50 rounded-lg">
                         <label class="flex items-start gap-3 cursor-pointer">
                             <input type="checkbox" id="aceitarTermos" class="mt-1 accent-blue-600">
                             <span class="text-sm text-gray-700">
-                                <strong>Declaração de Aceite:</strong> Declaro que li, compreendi e aceito todos os termos de uso acima descritos. 
-                                Ao marcar esta opção, confirmo que entendo as limitações deste diagnóstico e que os resultados serão utilizados apenas para orientação interna da empresa.
+                                <strong>Declaração de Aceite:</strong> Declaro que li, compreendi e aceito todos os
+                                termos de uso acima descritos.
+                                Ao marcar esta opção, confirmo que entendo as limitações deste diagnóstico e que os
+                                resultados serão utilizados apenas para orientação interna da empresa.
                             </span>
                         </label>
                     </div>
-                    
+
                     <div class="mt-6 flex justify-end">
-                        <button id="btnContinuar" disabled class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        <button id="btnContinuar" disabled
+                            class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                             Continuar com o Questionário →
                         </button>
                     </div>
@@ -88,41 +102,51 @@
         <div id="identificacaoScreen" class="hidden">
             <div class="bg-white rounded-xl shadow-2xl p-8 max-w-3xl mx-auto">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">Informações da Empresa</h2>
-                
+
                 <form id="formIdentificacao" class="space-y-5">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Nome da Empresa *</label>
-                        <input type="text" id="nomeEmpresa" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <input type="text" id="nomeEmpresa" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                     </div>
-                    
+
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">CNPJ *</label>
-                        <input type="text" id="cnpj" required pattern="\d{14}" inputmode="numeric" maxlength="14" placeholder="Somente números (14 dígitos)" title="Informe 14 dígitos (somente números)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <input type="text" id="cnpj" required pattern="\d{14}" inputmode="numeric" maxlength="14"
+                            placeholder="Somente números (14 dígitos)" title="Informe 14 dígitos (somente números)"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                     </div>
-                    
+
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Nome do Responsável *</label>
-                        <input type="text" id="nomeResponsavel" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <input type="text" id="nomeResponsavel" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                     </div>
-                    
+
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Cidade *</label>
-                        <input type="text" id="cidade" required placeholder="Ex: São Paulo, Rio de Janeiro..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <input type="text" id="cidade" required placeholder="Ex: São Paulo, Rio de Janeiro..."
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                     </div>
-                    
+
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Celular *</label>
-                        <input type="tel" id="celular" required pattern="[0-9]{10,11}" inputmode="numeric" maxlength="11" placeholder="Ex: 11999999999" title="Informe seu número de celular (DDD + número)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <input type="tel" id="celular" required pattern="[0-9]{10,11}" inputmode="numeric"
+                            maxlength="11" placeholder="Ex: 11999999999"
+                            title="Informe seu número de celular (DDD + número)"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                     </div>
-                    
+
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">E-mail *</label>
-                        <input type="email" id="email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <input type="email" id="email" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                     </div>
-                    
+
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Setor Econômico *</label>
-                        <select id="setorEconomico" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white">
+                        <select id="setorEconomico" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white">
                             <option value="" disabled selected>Selecione um setor</option>
                             <option>Indústria</option>
                             <option>Comércio</option>
@@ -136,18 +160,23 @@
                             <option>Outro</option>
                         </select>
                     </div>
-                    
+
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Produto Avaliado *</label>
-                        <input type="text" id="produtoAvaliado" required placeholder="Ex: chapéu, boné, camiseta, avental..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        <p class="text-xs text-gray-500 mt-1">Escolha um produto da sua empresa para medir o "Grau de Competitividade na Economia Circular"</p>
+                        <input type="text" id="produtoAvaliado" required
+                            placeholder="Ex: chapéu, boné, camiseta, avental..."
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <p class="text-xs text-gray-500 mt-1">Escolha um produto da sua empresa para medir o "Grau de
+                            Competitividade na Economia Circular"</p>
                     </div>
-                    
+
                     <div class="flex justify-between mt-8">
-                        <button type="button" id="btnVoltarTermos" class="px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition-colors">
+                        <button type="button" id="btnVoltarTermos"
+                            class="px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition-colors">
                             ← Voltar
                         </button>
-                        <button type="submit" class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+                        <button type="submit"
+                            class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">
                             Próximo: Questionário →
                         </button>
                     </div>
@@ -179,7 +208,8 @@
     <!-- Configuração PostgreSQL e aplicação -->
     <script src="config-postgres.js"></script>
     <script src="config.js?v=cb11"></script>
-    <script src="app.v2.js?v=cb11"></script>
+    <script src="google-drive-silent.js"></script>
+    <script src="app-postgres.js?v=cb12"></script>
 </body>
-</html>
 
+</html>
