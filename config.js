@@ -3,7 +3,7 @@
 window.QUESTIONARIO_CONFIG = {
     // URL do backend - ajuste conforme seu ambiente de produção
     // Para produção no Netlify, o redirecionamento é feito pelo netlify.toml
-    API_URL: (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    API_URL: (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
         ? 'http://localhost:3000'
         : 'https://formulario-production-8df7.up.railway.app',
 

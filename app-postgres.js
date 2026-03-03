@@ -2,14 +2,14 @@
 // Versão com conexão PostgreSQL Railway e Google Drive silencioso
 (() => {
     'use strict';
-    
+
     // Carregar configuração PostgreSQL
     const PG_CONFIG = window.POSTGRES_CONFIG || {};
     const DATABASE_CONFIG = PG_CONFIG.DATABASE_CONFIG || {};
     const REPORT_EMAIL = PG_CONFIG.REPORT_EMAIL || 'ti@cosmobrasil.app';
-    
+
     const CONFIG = window.QUESTIONARIO_CONFIG || {};
-    
+
     // Fallbacks defensivos caso config.js não carregue em produção
     const MAP_DEFAULT = {
         1: 'materia_prima',
@@ -25,7 +25,7 @@
         11: 'ciclo_rastreado',
         12: 'documentacao'
     };
-    
+
     const MET_DEFAULT = {
         PONTOS: {
             1: { 1: 0, 2: 2, 3: 3, 4: 2, 5: 1 },
@@ -49,9 +49,9 @@
             MONITORAMENTO: 0.15
         }
     };
-    
+
     const QUESTÕES = Array.isArray(CONFIG.QUESTÕES) ? CONFIG.QUESTÕES : [];
-    
+
     const elementos = {
         termosScreen: document.getElementById('termosScreen'),
         identificacaoScreen: document.getElementById('identificacaoScreen'),
@@ -63,31 +63,31 @@
         btnVoltarTermos: document.getElementById('btnVoltarTermos'),
         formIdentificacao: document.getElementById('formIdentificacao')
     };
-    
+
     const dados = {
         empresa: {},
         respostas: {},
         questaoAtual: 0
     };
-    
+
     // Event Listeners
-    elementos.aceitarTermos.addEventListener('change', function() {
+    elementos.aceitarTermos.addEventListener('change', function () {
         elementos.btnContinuar.disabled = !this.checked;
     });
-    
+
     elementos.btnContinuar.addEventListener('click', () => {
         elementos.termosScreen.classList.add('hidden');
         elementos.identificacaoScreen.classList.remove('hidden');
     });
-    
+
     elementos.btnVoltarTermos.addEventListener('click', () => {
         elementos.identificacaoScreen.classList.add('hidden');
         elementos.termosScreen.classList.remove('hidden');
     });
-    
-    elementos.formIdentificacao.addEventListener('submit', function(e) {
+
+    elementos.formIdentificacao.addEventListener('submit', function (e) {
         e.preventDefault();
-        
+
         dados.empresa = {
             nomeEmpresa: document.getElementById('nomeEmpresa').value,
             cnpj: document.getElementById('cnpj').value,
@@ -98,18 +98,98 @@
             setorEconomico: document.getElementById('setorEconomico').value,
             produtoAvaliado: document.getElementById('produtoAvaliado').value
         };
-        
+
         iniciarQuestionario();
     });
-    
+
+    // Funcionalidade de consulta de CNPJ via API EmpresaAqui
+    const btnConsultar = document.getElementById('btnConsultarCNPJ');
+    const inputCNPJ = document.getElementById('cnpj');
+    const feedbackCNPJ = document.getElementById('feedbackCNPJ');
+
+    if (btnConsultar) {
+        btnConsultar.addEventListener('click', async () => {
+            const cnpj = inputCNPJ.value.replace(/\D/g, '');
+
+            if (cnpj.length !== 14) {
+                mostrarFeedbackCNPJ('Informe um CNPJ válido com 14 dígitos.', 'text-red-600');
+                return;
+            }
+
+            try {
+                btnConsultar.disabled = true;
+                btnConsultar.innerHTML = '<span class="animate-pulse">Consultando...</span>';
+                mostrarFeedbackCNPJ('Buscando dados na Receita...', 'text-orange-600');
+
+                const response = await fetch(`${CONFIG.API_URL || ''}/api/cnpj/${cnpj}`);
+                const result = await response.json();
+
+                if (result.success && result.data) {
+                    const d = result.data;
+                    document.getElementById('nomeEmpresa').value = d.fantasia || d.razao || '';
+                    document.getElementById('cidade').value = d.cidade || '';
+                    document.getElementById('email').value = d.email || '';
+                    document.getElementById('celular').value = d.telefone || '';
+
+                    // Tentar mapear setor pelo CNAE
+                    mapearSetorPeloCNAE(d.cnae_principal);
+
+                    mostrarFeedbackCNPJ('✅ Dados carregados com sucesso!', 'text-emerald-600');
+                } else {
+                    mostrarFeedbackCNPJ('❌ ' + (result.error || 'CNPJ não encontrado.'), 'text-red-600');
+                }
+            } catch (error) {
+                console.error('Erro na consulta de CNPJ:', error);
+                mostrarFeedbackCNPJ('⚠️ Erro na conexão com o servidor.', 'text-red-600');
+            } finally {
+                btnConsultar.disabled = false;
+                btnConsultar.innerText = 'Consultar';
+            }
+        });
+    }
+
+    function mostrarFeedbackCNPJ(texto, classeCor) {
+        if (!feedbackCNPJ) return;
+        feedbackCNPJ.innerText = texto;
+        feedbackCNPJ.className = `text-xs mt-1 ${classeCor}`;
+        feedbackCNPJ.classList.remove('hidden');
+    }
+
+    function mapearSetorPeloCNAE(cnae) {
+        if (!cnae) return;
+        const div = parseInt(cnae.substring(0, 2), 10);
+        const select = document.getElementById('setorEconomico');
+        if (!select) return;
+
+        let setor = '';
+        if (div >= 1 && div <= 3) setor = 'Agropecuária';
+        else if (div >= 5 && div <= 33) setor = 'Indústria';
+        else if (div >= 41 && div <= 43) setor = 'Construção Civil';
+        else if (div >= 45 && div <= 47) setor = 'Comércio';
+        else if (div >= 49 && div <= 53) setor = 'Transporte e Logística';
+        else if (div >= 62 && div <= 63) setor = 'Tecnologia da Informação';
+        else if (div === 85) setor = 'Educação';
+        else if (div >= 86 && div <= 88) setor = 'Saúde';
+        else setor = 'Serviços';
+
+        if (setor) {
+            for (let i = 0; i < select.options.length; i++) {
+                if (select.options[i].text === setor) {
+                    select.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
     function iniciarQuestionario() {
         elementos.identificacaoScreen.classList.add('hidden');
         elementos.questionarioScreen.classList.remove('hidden');
-        
+
         dados.questaoAtual = 0;
         renderizarQuestao();
     }
-    
+
     function renderizarQuestao() {
         const questao = QUESTÕES[dados.questaoAtual];
         const html = `
@@ -150,18 +230,18 @@
                 </div>
             </div>
         `;
-        
+
         elementos.questionarioScreen.innerHTML = html;
-        
+
         // Event listeners para o formulário
         const formQuestao = document.getElementById('formQuestao');
-        formQuestao.addEventListener('submit', function(e) {
+        formQuestao.addEventListener('submit', function (e) {
             e.preventDefault();
             const resposta = formQuestao.querySelector('input[name="resposta"]:checked').value;
             dados.respostas[questao.id] = parseInt(resposta);
             proximaQuestao();
         });
-        
+
         const btnAnterior = document.getElementById('btnAnterior');
         if (dados.questaoAtual > 0) {
             btnAnterior.addEventListener('click', questaoAnterior);
@@ -169,7 +249,7 @@
             btnAnterior.style.display = 'none';
         }
     }
-    
+
     function proximaQuestao() {
         if (dados.questaoAtual < QUESTÕES.length - 1) {
             dados.questaoAtual++;
@@ -178,25 +258,25 @@
             finalizarQuestionario();
         }
     }
-    
+
     function questaoAnterior() {
         if (dados.questaoAtual > 0) {
             dados.questaoAtual--;
             renderizarQuestao();
         }
     }
-    
+
     // Função para conectar ao PostgreSQL e salvar dados VIA API BACKEND
     async function salvarDadosNoPostgreSQL() {
         try {
             console.log('🔄 Enviando dados para o Backend API...');
-            
+
             // Validar configuração
             const apiUrl = CONFIG.API_URL || '';
-            
+
             // Calcular índices
             const { pontos, totalPossivel, percentual, maturidade } = calcularPontuacao();
-            
+
             // Preparar dados do questionário
             const respostasMapeadas = Object.entries(CONFIG.MAPEAMENTO_RESPOSTAS || MAP_DEFAULT).reduce((acc, [id, coluna]) => {
                 acc[coluna] = dados.respostas[parseInt(id, 10)] || null;
@@ -209,7 +289,7 @@
             const potencial = 100 - percentual;
             const dataStr = new Date().toLocaleString('pt-BR');
             const idRelatorio = Math.floor(Math.random() * 1000) + 1;
-            
+
             const htmlEmail = construirHtmlEmailRelatorio({
                 empresa: dados.empresa,
                 percentual,
@@ -223,7 +303,7 @@
                 totalPossivel,
                 potencial
             });
-            
+
             // Dados completos para o backend
             const payload = {
                 empresa: dados.empresa,
@@ -235,12 +315,12 @@
                 },
                 relatorioHtml: htmlEmail
             };
-            
-            console.log('📋 Payload preparado:', { 
-                empresa: payload.empresa.nomeEmpresa, 
-                apiUrl 
+
+            console.log('📋 Payload preparado:', {
+                empresa: payload.empresa.nomeEmpresa,
+                apiUrl
             });
-            
+
             // Envio real para o backend
             const response = await fetch(`${apiUrl}/api/questionario`, {
                 method: 'POST',
@@ -257,47 +337,47 @@
 
             const result = await response.json();
             console.log('✅ Dados salvos com sucesso via API:', result);
-            
+
             return {
                 success: true,
                 driveSaved: result.driveSaved,
                 driveUrl: result.driveUrl,
                 empresaId: result.empresaId
             };
-            
+
         } catch (error) {
             console.error('❌ Erro ao salvar dados:', error);
             throw error;
         }
     }
-    
+
     async function finalizarQuestionario() {
         // Mostrar loading enquanto salva
         mostrarLoading();
         try {
             // Salvar dados via API (PostgreSQL + Drive no backend)
             const result = await salvarDadosNoPostgreSQL();
-            
+
             if (!result.success) {
                 throw new Error('Falha ao salvar dados no backend');
             }
-            
+
             console.log('Processo de salvamento concluído.');
-            
+
             if (result.driveSaved) {
                 console.log('💾 Relatório salvo no Drive:', result.driveUrl);
             } else {
                 console.warn('⚠️ Relatório foi salvo no banco, mas não no Drive (verifique o backend).');
             }
-            
+
             mostrarConfirmacao(result);
-            
+
         } catch (error) {
             console.error('Erro ao salvar dados:', error);
             mostrarErro(error.message);
         }
     }
-    
+
     function mostrarLoading() {
         elementos.questionarioScreen.classList.remove('hidden');
         elementos.confirmacaoScreen.classList.add('hidden');
@@ -311,7 +391,7 @@
             </div>
         `;
     }
-    
+
     function mostrarErro(mensagem) {
         elementos.confirmacaoScreen.classList.remove('hidden');
         elementos.confirmacaoScreen.innerHTML = `
@@ -330,7 +410,7 @@
             </div>
         `;
     }
-    
+
     function calcularPontuacao() {
         const MET = CONFIG.METODOLOGIA || MET_DEFAULT;
         const r = dados.respostas;
@@ -373,7 +453,7 @@
 
         return { pontos, totalPossivel, percentual, grupos, maturidade };
     }
-    
+
     function classificarEstagio(percentual) {
         if (percentual >= 75) return 'Alto';
         if (percentual >= 60) return 'Médio/Alto';
@@ -381,7 +461,7 @@
         if (percentual >= 30) return 'Baixo/Médio';
         return 'Baixo';
     }
-    
+
     function gerarRecomendacoes(r) {
         const rec = {
             INPUT: [], RESIDUOS: [], OUTPUT: [], VIDA: [], MONITORAMENTO: []
@@ -424,7 +504,7 @@
         if (rec.MONITORAMENTO.length === 0) rec.MONITORAMENTO.push('Integrar dados de ciclo de vida ao CRM e suporte técnico.');
         return rec;
     }
-    
+
     // Funções de relatório (mantidas iguais)
     function construirHtmlEmailRelatorio({ empresa, percentual, maturidade, estagio, grupos, recs, dataStr, idRelatorio, pontos, totalPossivel, potencial }) {
         const setores = grupos || {};
@@ -489,11 +569,11 @@
         </body>
         </html>`;
     }
-    
+
     function mostrarConfirmacao(driveResult = null) {
         elementos.questionarioScreen.classList.add('hidden');
         elementos.confirmacaoScreen.classList.remove('hidden');
-        
+
         elementos.confirmacaoScreen.innerHTML = `
             <div class="bg-white rounded-xl shadow-2xl p-8 max-w-3xl mx-auto">
                 <div class="text-center">
@@ -519,13 +599,13 @@
                 </div>
             </div>
         `;
-        
+
         const btnVerRelatorio = document.getElementById('btnVerRelatorio');
         if (btnVerRelatorio) {
             btnVerRelatorio.addEventListener('click', mostrarRelatorio);
         }
     }
-    
+
     async function mostrarRelatorio() {
         elementos.confirmacaoScreen.classList.add('hidden');
         elementos.relatorioScreen.classList.remove('hidden');
@@ -537,7 +617,7 @@
         const idRelatorio = Math.floor(Math.random() * 1000) + 1;
         const estagio = classificarEstagio(percentual);
         const recs = gerarRecomendacoes(dados.respostas);
-        
+
         elementos.relatorioScreen.innerHTML = `
             <div class="bg-white rounded-xl shadow-2xl p-8 max-w-4xl mx-auto">
                 <div class="mb-6">
@@ -628,7 +708,7 @@
                 </div>
             </div>
         `;
-        
+
         const btnVoltar = document.getElementById('btnVoltarConfirmacao');
         if (btnVoltar) {
             btnVoltar.addEventListener('click', () => {
@@ -636,7 +716,7 @@
                 elementos.confirmacaoScreen.classList.remove('hidden');
             });
         }
-        
+
         const btnPDF = document.getElementById('btnExportarPDF');
         if (btnPDF) {
             btnPDF.addEventListener('click', exportarRelatorioPDF);
@@ -646,7 +726,7 @@
             btnHTML.addEventListener('click', baixarRelatorioHTML);
         }
     }
-    
+
     function exportarRelatorioPDF() {
         const html = elementos.relatorioScreen.innerHTML;
         const win = window.open('', '_blank');
@@ -658,7 +738,7 @@
             win.print();
         };
     }
-    
+
     function baixarRelatorioHTML() {
         const htmlConteudo = elementos.relatorioScreen.innerHTML;
         const doc = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Circularidade</title><link rel="stylesheet" href="style.css"><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#fff;padding:2rem;max-width:900px;margin:auto;} h2{margin:0 0 0.5rem;} .card{border:1px solid #e5e7eb;border-radius:0.5rem;padding:1rem;margin-bottom:1rem;} .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;} .badge{display:inline-block;padding:0.25rem 0.5rem;border-radius:0.375rem;background:#f1f5f9;color:#0f172a;font-weight:600;font-size:0.75rem;} ul{margin:0;padding-left:1rem;} li{margin:0.25rem 0;}</style></head><body>${htmlConteudo}</body></html>`;
@@ -672,18 +752,9 @@
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
-    
+
     // Inicialização
     console.log('Aplicativo do Questionário 2.0 - 2026 carregado');
     console.log('Total de questões:', QUESTÕES.length);
-    console.log('Configuração PostgreSQL:', {
-        host: DATABASE_CONFIG.host || 'NÃO CONFIGURADO',
-        database: DATABASE_CONFIG.database || 'NÃO CONFIGURADO',
-        reportEmail: REPORT_EMAIL || 'NÃO DEFINIDO'
-    });
-    
-    if (!DATABASE_CONFIG.host || !DATABASE_CONFIG.database) {
-        console.warn('⚠️ ATENÇÃO: Configuração do PostgreSQL incompleta!');
-    }
-    
+
 })();

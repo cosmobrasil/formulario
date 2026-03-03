@@ -1,11 +1,20 @@
 #!/bin/bash
 # Simple verification for our specific tables
 
-export PGPASSWORD="kSYfUUXCRhOPVPwztXwieXmYOGnmSlZD"
-HOST="centerbeam.proxy.rlwy.net"
-PORT="16594"
-DATABASE="railway"
-USER="postgres"
+if [ -f "./backend/.env" ]; then
+    echo "📄 Loading credentials from backend/.env..."
+    export $(grep -v '^#' ./backend/.env | xargs)
+    HOST=$PGHOST
+    PORT=$PGPORT
+    DATABASE=$PGDATABASE
+    USER=$PGUSER
+else
+    export PGPASSWORD="kSYfUUXCRhOPVPwztXwieXmYOGnmSlZD"
+    HOST="centerbeam.proxy.rlwy.net"
+    PORT="16594"
+    DATABASE="railway"
+    USER="postgres"
+fi
 
 echo "🔍 Checking if our tables exist..."
 

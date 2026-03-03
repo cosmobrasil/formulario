@@ -24,16 +24,39 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             const clientSecretFile = fs.readFileSync(clientSecretPath, 'utf8');
             clientSecret = JSON.parse(clientSecretFile);
             console.log('✅ Credenciais Google carregadas (arquivo local)');
+        } else {
+            console.warn('⚠️ Arquivo de credenciais não encontrado:', clientSecretPath);
         }
     } catch (error) {
-        console.warn('⚠️ Google credentials não encontradas - Drive não será configurado');
+        console.warn('⚠️ Erro ao carregar credenciais locais:', error.message);
     }
+}
+
+// Se nenhuma credencial foi carregada, mostrar mensagem clara
+if (!clientSecret) {
+    console.error('❌ NENHUMA CREDENCIAL GOOGLE ENCONTRADA!');
+    console.error('   Configure as variáveis de ambiente no Railway:');
+    console.error('   - GOOGLE_CLIENT_ID');
+    console.error('   - GOOGLE_CLIENT_SECRET');
+    console.error('   Ou coloque o arquivo client_secret_*.json na raiz do projeto');
 }
 
 class GoogleDriveService {
     constructor() {
-        this.clientId = clientSecret?.web?.client_id;
-        this.clientSecret = clientSecret?.web?.client_secret;
+        // Verificar se as credenciais foram carregadas
+        if (!clientSecret || !clientSecret.web) {
+            console.error('❌ Serviço Google Drive não pode ser inicializado - credenciais ausentes');
+            this.clientId = null;
+            this.clientSecret = null;
+            this.redirectUri = null;
+            this.refreshToken = null;
+            this.accessToken = null;
+            this.tokenExpiry = null;
+            return;
+        }
+        
+        this.clientId = clientSecret.web.client_id;
+        this.clientSecret = clientSecret.web.client_secret;
         // Usar redirect URI dinâmico baseado em variável de ambiente ou public URL
         if (process.env.GOOGLE_REDIRECT_URI) {
             this.redirectUri = process.env.GOOGLE_REDIRECT_URI;
@@ -83,6 +106,11 @@ class GoogleDriveService {
 
     // Obter access token usando refresh token
     async getAccessToken() {
+        // Verificar se temos credenciais válidas
+        if (!this.clientId || !this.clientSecret) {
+            throw new Error('Credenciais Google não configuradas. Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no Railway.');
+        }
+        
         // Se temos um access token válido, retorna ele
         if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
             return this.accessToken;
@@ -127,6 +155,11 @@ class GoogleDriveService {
 
     // Trocar código de autorização por tokens
     async exchangeCodeForTokens(code) {
+        // Verificar se temos credenciais válidas
+        if (!this.clientId || !this.clientSecret) {
+            throw new Error('Credenciais Google não configuradas. Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no Railway.');
+        }
+        
         try {
             const response = await fetch('https://oauth2.googleapis.com/token', {
                 method: 'POST',
@@ -291,6 +324,10 @@ class GoogleDriveService {
 
     // Verificar se está autenticado
     isAuthenticated() {
+        // Se não temos credenciais, não podemos estar autenticados
+        if (!this.clientId || !this.clientSecret) {
+            return false;
+        }
         return !!this.refreshToken;
     }
 }

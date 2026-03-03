@@ -3,12 +3,22 @@
 
 echo "🚀 Testing PostgreSQL connection for Questionário 2026..."
 
-# Database credentials from Railway
-export PGPASSWORD="kSYfUUXCRhOPVPwztXwieXmYOGnmSlZD"
-HOST="centerbeam.proxy.rlwy.net"
-PORT="16594"
-DATABASE="railway"
-USER="postgres"
+# Database credentials
+if [ -f "./backend/.env" ]; then
+    echo "📄 Loading credentials from backend/.env..."
+    export $(grep -v '^#' ./backend/.env | xargs)
+    HOST=$PGHOST
+    PORT=$PGPORT
+    DATABASE=$PGDATABASE
+    USER=$PGUSER
+else
+    # Fallback to hardcoded for testing only if .env is missing
+    export PGPASSWORD="kSYfUUXCRhOPVPwztXwieXmYOGnmSlZD"
+    HOST="centerbeam.proxy.rlwy.net"
+    PORT="16594"
+    DATABASE="railway"
+    USER="postgres"
+fi
 
 # Test connection
 echo "🔌 Testing database connection..."

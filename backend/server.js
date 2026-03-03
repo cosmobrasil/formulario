@@ -5,6 +5,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const path = require('path');
+require('dotenv').config();
 const GoogleDriveService = require('./google-drive-service');
 
 const app = express();
@@ -18,13 +19,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../')));
 
-// Configuração do PostgreSQL Railway
+// Configuração do PostgreSQL
 const pool = new Pool({
-    host: 'centerbeam.proxy.rlwy.net',
-    port: 16594,
-    database: 'railway',
-    user: 'postgres',
-    password: 'kSYfUUXCRhOPVPwztXwieXmYOGnmSlZD',
+    host: process.env.PGHOST,
+    port: process.env.PGPORT,
+    database: process.env.PGDATABASE,
+    user: process.env.PGUSER,
+    password: process.env.PGPASSWORD,
     ssl: {
         rejectUnauthorized: false
     },
@@ -73,6 +74,59 @@ function limparCelular(celular) {
     if (!celular) return '';
     return celular.replace(/\D/g, ''); // Remove tudo que não é dígito
 }
+
+// Endpoint para consulta de CNPJ via EmpresaAqui
+app.get('/api/cnpj/:cnpj', async (req, res) => {
+    const { cnpj } = req.params;
+    const token = process.env.EMPRESAQUI_TOKEN;
+
+    if (!token || token === 'SEU_TOKEN_AQUI') {
+        return res.status(500).json({
+            success: false,
+            error: 'Token da API EmpresaAqui não configurado no servidor.'
+        });
+    }
+
+    try {
+        const cnpjLimpo = cnpj.replace(/\D/g, '');
+        console.log(`🔍 Consultando CNPJ: ${cnpjLimpo}`);
+
+        const response = await fetch(`https://www.empresaqui.com.br/api/${token}/${cnpjLimpo}`);
+
+        if (!response.ok) {
+            throw new Error(`Erro na API EmpresaAqui: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data || data.erro) {
+            return res.status(404).json({
+                success: false,
+                error: data.erro || 'CNPJ não encontrado ou erro na consulta.'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                razao: data.razao,
+                fantasia: data.fantasia,
+                email: data.email,
+                telefone: `${data.ddd_1 || ''}${data.tel_1 || ''}`,
+                cidade: data.log_municipio,
+                uf: data.log_uf,
+                cnae_principal: data.cnae_principal
+            }
+        });
+
+    } catch (error) {
+        console.error('Erro ao consultar CNPJ:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erro interno ao consultar CNPJ.'
+        });
+    }
+});
 
 // Endpoint para salvar questionário
 app.post('/api/questionario', async (req, res) => {
