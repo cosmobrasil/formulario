@@ -557,75 +557,39 @@
             .map((chave) => [chave, fonte[chave]]);
     }
 
-    function gerarSvgIndiceCircularidade(grupos, percentual, size = 320) {
-        const dados = obterGruposOrdenados(grupos);
-        if (!dados.length) return '';
-
+    function gerarSvgIndiceCircularidade(percentual, size = 320) {
+        const valor = Math.max(0, Math.min(100, Number(percentual) || 0));
         const centro = size / 2;
-        const raioMax = size * 0.30;
-        const raioLabel = raioMax + 28;
-        const aneis = [25, 50, 75, 100];
-
-        const ponto = (indice, valorPercentual, raioExtra = 0) => {
-            const angulo = ((Math.PI * 2) / dados.length) * indice - Math.PI / 2;
-            const raio = (raioMax * Math.max(0, Math.min(100, valorPercentual))) / 100 + raioExtra;
-            return {
-                x: centro + (Math.cos(angulo) * raio),
-                y: centro + (Math.sin(angulo) * raio)
-            };
-        };
-
-        const pontosPoligono = dados
-            .map(([, valor], i) => {
-                const p = ponto(i, Number(valor) || 0);
-                return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
-            })
-            .join(' ');
-
-        const eixos = dados
-            .map((_, i) => {
-                const p = ponto(i, 100);
-                return `<line x1="${centro}" y1="${centro}" x2="${p.x.toFixed(2)}" y2="${p.y.toFixed(2)}" stroke="#d1d5db" stroke-width="1"/>`;
-            })
-            .join('');
-
-        const grades = aneis
-            .map((nivel) => {
-                const pts = dados
-                    .map((_, i) => {
-                        const p = ponto(i, nivel);
-                        return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
-                    })
-                    .join(' ');
-                return `<polygon points="${pts}" fill="none" stroke="#e5e7eb" stroke-width="1"/>`;
-            })
-            .join('');
-
-        const labels = dados
-            .map(([chave, valor], i) => {
-                const p = ponto(i, 100, raioLabel - raioMax);
-                return `<text x="${p.x.toFixed(2)}" y="${p.y.toFixed(2)}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-family="Arial, sans-serif" fill="#1f2937">
-                    <tspan x="${p.x.toFixed(2)}" dy="-0.35em">${formatarNomeGrupo(chave)}</tspan>
-                    <tspan x="${p.x.toFixed(2)}" dy="1.2em">${Number(valor) || 0}%</tspan>
-                </text>`;
-            })
-            .join('');
+        const raio = size * 0.34;
+        const espessura = Math.max(14, size * 0.11);
+        const circunferencia = 2 * Math.PI * raio;
+        const preenchido = (circunferencia * valor) / 100;
+        const restante = circunferencia - preenchido;
 
         return `
-            <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Índice de Circularidade por categoria">
-                ${grades}
-                ${eixos}
-                <polygon points="${pontosPoligono}" fill="#22c55e33" stroke="#16a34a" stroke-width="2.5"></polygon>
-                ${labels}
-                <circle cx="${centro}" cy="${centro}" r="${size * 0.12}" fill="#16a34a"></circle>
-                <text x="${centro}" y="${centro}" text-anchor="middle" dominant-baseline="middle" font-size="26" font-weight="700" font-family="Arial, sans-serif" fill="#ffffff">${percentual}%</text>
+            <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Índice de Circularidade">
+                <circle cx="${centro}" cy="${centro}" r="${raio}" fill="none" stroke="#dcfce7" stroke-width="${espessura}"></circle>
+                <circle
+                    cx="${centro}"
+                    cy="${centro}"
+                    r="${raio}"
+                    fill="none"
+                    stroke="#16a34a"
+                    stroke-width="${espessura}"
+                    stroke-linecap="round"
+                    stroke-dasharray="${preenchido.toFixed(2)} ${restante.toFixed(2)}"
+                    transform="rotate(-90 ${centro} ${centro})"
+                ></circle>
+                <circle cx="${centro}" cy="${centro}" r="${raio - (espessura * 0.72)}" fill="#ffffff"></circle>
+                <text x="${centro}" y="${centro - 6}" text-anchor="middle" font-size="${Math.round(size * 0.13)}" font-weight="700" font-family="Arial, sans-serif" fill="#166534">${valor}%</text>
+                <text x="${centro}" y="${centro + 18}" text-anchor="middle" font-size="${Math.round(size * 0.045)}" font-family="Arial, sans-serif" fill="#166534">Índice de Circularidade</text>
             </svg>
         `;
     }
 
     function construirHtmlEmailRelatorio({ empresa, percentual, maturidade, estagio, grupos, recs, dataStr, idRelatorio, pontos, totalPossivel, potencial }) {
         const gruposOrdenados = obterGruposOrdenados(grupos);
-        const graficoSvg = gerarSvgIndiceCircularidade(grupos, percentual, 320);
+        const graficoSvg = gerarSvgIndiceCircularidade(percentual, 320);
         const lista = (arr) => Array.isArray(arr) ? arr.map(i => `<li>${i}</li>`).join('') : '';
         return `<!DOCTYPE html>
         <html lang="pt-BR">
@@ -750,7 +714,7 @@
         const estagio = classificarEstagio(percentual);
         const recs = gerarRecomendacoes(dados.respostas);
         const gruposOrdenados = obterGruposOrdenados(grupos);
-        const graficoIndiceSvg = gerarSvgIndiceCircularidade(grupos, percentual, 360);
+        const graficoIndiceSvg = gerarSvgIndiceCircularidade(percentual, 360);
 
         elementos.relatorioScreen.innerHTML = `
             <div class="bg-white rounded-xl shadow-2xl p-8 max-w-4xl mx-auto">
