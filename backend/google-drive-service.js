@@ -81,11 +81,19 @@ class GoogleDriveService {
     // Carregar refresh token salvo
     loadRefreshToken() {
         try {
+            // Produção: priorizar variável de ambiente (persistente no Railway)
+            if (process.env.GOOGLE_REFRESH_TOKEN) {
+                this.refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+                console.log('✅ Refresh token carregado (variável de ambiente)');
+                return;
+            }
+
+            // Desenvolvimento/local: fallback para arquivo
             const tokenPath = path.join(__dirname, 'google_refresh_token.json');
             if (fs.existsSync(tokenPath)) {
                 const tokenData = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
                 this.refreshToken = tokenData.refresh_token;
-                console.log('✅ Refresh token carregado');
+                console.log('✅ Refresh token carregado (arquivo local)');
             }
         } catch (error) {
             console.warn('⚠️ Nenhum refresh token encontrado');
@@ -98,7 +106,11 @@ class GoogleDriveService {
             const tokenPath = path.join(__dirname, 'google_refresh_token.json');
             fs.writeFileSync(tokenPath, JSON.stringify({ refresh_token: refreshToken }));
             this.refreshToken = refreshToken;
-            console.log('✅ Refresh token salvo');
+            if (process.env.RAILWAY_ENVIRONMENT) {
+                console.log('✅ Refresh token atualizado em memória. Defina GOOGLE_REFRESH_TOKEN no Railway para persistência.');
+            } else {
+                console.log('✅ Refresh token salvo');
+            }
         } catch (error) {
             console.error('❌ Erro ao salvar refresh token:', error);
         }
