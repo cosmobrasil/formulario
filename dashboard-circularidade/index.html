@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard de Distrito Circular</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Dashboard de Distrito Circular</h1>
+      <p class="subtitle">Painel consolidado da circularidade por setor, produto e território.</p>
+    </div>
+    <img src="./logo.png" alt="Logo CosmoBrasil" class="logo" />
+  </header>
+
+  <main class="container">
+    <section class="panel filters-panel">
+      <h2>Filtros de análise</h2>
+      <div class="filters-grid">
+        <label>Setor
+          <select id="filtroSetor"><option value="">Todos</option></select>
+        </label>
+        <label>Produto
+          <select id="filtroProduto"><option value="">Todos</option></select>
+        </label>
+        <label>Cidade
+          <select id="filtroCidade"><option value="">Todas</option></select>
+        </label>
+        <label>UF
+          <select id="filtroUf"><option value="">Todas</option></select>
+        </label>
+        <label>Data início
+          <input id="filtroDataInicio" type="date" />
+        </label>
+        <label>Data fim
+          <input id="filtroDataFim" type="date" />
+        </label>
+      </div>
+      <div class="actions-row">
+        <button id="btnAtualizar">Atualizar painel</button>
+        <label class="refresh-label"><input id="autoRefresh" type="checkbox" /> Atualização automática (60s)</label>
+      </div>
+    </section>
+
+    <section class="kpis-grid">
+      <article class="kpi panel"><h3>Total de formulários</h3><p id="kpiTotal">-</p></article>
+      <article class="kpi panel"><h3>Média total de pontos</h3><p id="kpiPontos">-</p></article>
+      <article class="kpi panel"><h3>Média IGC</h3><p id="kpiIGC">-</p></article>
+      <article class="kpi panel"><h3>Média IME</h3><p id="kpiIME">-</p></article>
+    </section>
+
+    <section class="charts-grid">
+      <article class="panel chart-panel">
+        <h3>Percentual de pontos por tópico</h3>
+        <canvas id="chartTopicos"></canvas>
+      </article>
+
+      <article class="panel chart-panel">
+        <h3>Índice Global de Circularidade (IGC)</h3>
+        <canvas id="chartIGC"></canvas>
+        <p class="tech-text">
+          O IGC sintetiza o quão circular é o modelo do produto, avaliando origem de matéria-prima,
+          gestão de resíduos, reciclagem, reparabilidade e reaproveitamento.
+        </p>
+      </article>
+
+      <article class="panel chart-panel">
+        <h3>Índice de Maturidade Estruturante (IME)</h3>
+        <canvas id="chartIME"></canvas>
+        <p class="tech-text">
+          O IME mede a estrutura de suporte à circularidade: durabilidade, design reparável,
+          reaproveitamento, serviços de extensão do ciclo, rastreabilidade e transparência.
+        </p>
+      </article>
+
+      <article class="panel chart-panel">
+        <h3>Índice de Circularidade do Produto</h3>
+        <canvas id="chartCircularidadeProduto"></canvas>
+        <p class="tech-text">
+          Visão dos cinco tópicos principais: Entrada, Gestão de Resíduos, Saída do Produto,
+          Vida do Produto e Monitoramento.
+        </p>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h3>Pontos Estratégicos de Atenção</h3>
+      <div id="recomendacoes" class="recomendacoes-grid"></div>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
