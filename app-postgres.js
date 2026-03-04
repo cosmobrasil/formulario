@@ -308,7 +308,7 @@
             const apiUrl = CONFIG.API_URL || '';
 
             // Calcular índices
-            const { pontos, totalPossivel, percentual, maturidade } = calcularPontuacao();
+            const { pontos, totalPossivel, percentual, maturidade, grupos } = calcularPontuacao();
 
             // Preparar dados do questionário
             const respostasMapeadas = Object.entries(CONFIG.MAPEAMENTO_RESPOSTAS || MAP_DEFAULT).reduce((acc, [id, coluna]) => {
@@ -328,7 +328,7 @@
                 percentual,
                 maturidade,
                 estagio,
-                grupos: calcularPontuacao().grupos,
+                grupos,
                 recs,
                 dataStr,
                 idRelatorio,
@@ -538,9 +538,94 @@
         return rec;
     }
 
-    // Funções de relatório (mantidas iguais)
+    function formatarNomeGrupo(chave) {
+        const nomes = {
+            INPUT: 'INPUT',
+            RESIDUOS: 'RESÍDUOS',
+            OUTPUT: 'OUTPUT',
+            VIDA: 'VIDA',
+            MONITORAMENTO: 'MONITORAMENTO'
+        };
+        return nomes[chave] || chave;
+    }
+
+    function obterGruposOrdenados(grupos) {
+        const ordem = ['INPUT', 'RESIDUOS', 'OUTPUT', 'VIDA', 'MONITORAMENTO'];
+        const fonte = grupos || {};
+        return ordem
+            .filter((chave) => Object.prototype.hasOwnProperty.call(fonte, chave))
+            .map((chave) => [chave, fonte[chave]]);
+    }
+
+    function gerarSvgIndiceCircularidade(grupos, percentual, size = 320) {
+        const dados = obterGruposOrdenados(grupos);
+        if (!dados.length) return '';
+
+        const centro = size / 2;
+        const raioMax = size * 0.30;
+        const raioLabel = raioMax + 28;
+        const aneis = [25, 50, 75, 100];
+
+        const ponto = (indice, valorPercentual, raioExtra = 0) => {
+            const angulo = ((Math.PI * 2) / dados.length) * indice - Math.PI / 2;
+            const raio = (raioMax * Math.max(0, Math.min(100, valorPercentual))) / 100 + raioExtra;
+            return {
+                x: centro + (Math.cos(angulo) * raio),
+                y: centro + (Math.sin(angulo) * raio)
+            };
+        };
+
+        const pontosPoligono = dados
+            .map(([, valor], i) => {
+                const p = ponto(i, Number(valor) || 0);
+                return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+            })
+            .join(' ');
+
+        const eixos = dados
+            .map((_, i) => {
+                const p = ponto(i, 100);
+                return `<line x1="${centro}" y1="${centro}" x2="${p.x.toFixed(2)}" y2="${p.y.toFixed(2)}" stroke="#d1d5db" stroke-width="1"/>`;
+            })
+            .join('');
+
+        const grades = aneis
+            .map((nivel) => {
+                const pts = dados
+                    .map((_, i) => {
+                        const p = ponto(i, nivel);
+                        return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+                    })
+                    .join(' ');
+                return `<polygon points="${pts}" fill="none" stroke="#e5e7eb" stroke-width="1"/>`;
+            })
+            .join('');
+
+        const labels = dados
+            .map(([chave, valor], i) => {
+                const p = ponto(i, 100, raioLabel - raioMax);
+                return `<text x="${p.x.toFixed(2)}" y="${p.y.toFixed(2)}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-family="Arial, sans-serif" fill="#1f2937">
+                    <tspan x="${p.x.toFixed(2)}" dy="-0.35em">${formatarNomeGrupo(chave)}</tspan>
+                    <tspan x="${p.x.toFixed(2)}" dy="1.2em">${Number(valor) || 0}%</tspan>
+                </text>`;
+            })
+            .join('');
+
+        return `
+            <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Índice de Circularidade por categoria">
+                ${grades}
+                ${eixos}
+                <polygon points="${pontosPoligono}" fill="#22c55e33" stroke="#16a34a" stroke-width="2.5"></polygon>
+                ${labels}
+                <circle cx="${centro}" cy="${centro}" r="${size * 0.12}" fill="#16a34a"></circle>
+                <text x="${centro}" y="${centro}" text-anchor="middle" dominant-baseline="middle" font-size="26" font-weight="700" font-family="Arial, sans-serif" fill="#ffffff">${percentual}%</text>
+            </svg>
+        `;
+    }
+
     function construirHtmlEmailRelatorio({ empresa, percentual, maturidade, estagio, grupos, recs, dataStr, idRelatorio, pontos, totalPossivel, potencial }) {
-        const setores = grupos || {};
+        const gruposOrdenados = obterGruposOrdenados(grupos);
+        const graficoSvg = gerarSvgIndiceCircularidade(grupos, percentual, 320);
         const lista = (arr) => Array.isArray(arr) ? arr.map(i => `<li>${i}</li>`).join('') : '';
         return `<!DOCTYPE html>
         <html lang="pt-BR">
@@ -556,6 +641,12 @@
             p,li{font-size:14px;line-height:1.5;color:#374151}
             .card{border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin-top:10px}
             .grid{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px}
+            .diag{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:center}
+            .radar{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:8px}
+            .cats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+            .cat{background:#ffffff;border:1px solid #d1fae5;border-radius:8px;padding:8px}
+            .cat .name{font-size:11px;color:#166534;font-weight:600}
+            .cat .val{font-size:18px;color:#166534;font-weight:700}
             .badge{display:inline-block;padding:4px 8px;border-radius:6px;background:#ecfdf5;color:#065f46;font-weight:600;font-size:12px}
             .small{font-size:12px;color:#6b7280}
             .footer{margin-top:24px;font-size:12px;color:#9ca3af}
@@ -580,8 +671,16 @@
               <h2>Resultado</h2>
               <p><span class="badge">Índice Global: ${percentual}%</span> · <span class="badge">Maturidade: ${maturidade}%</span> · <span class="badge">Estágio: ${estagio}</span></p>
               <p>Pontuação: ${pontos} de ${totalPossivel} · Potencial de melhoria: ${potencial}%</p>
-              <div class="grid">
-                ${Object.entries(setores).map(([nome, perc]) => `<div><p class="small"><strong>${nome}</strong></p><p>${perc}%</p></div>`).join('')}
+              <div class="diag">
+                <div class="radar">${graficoSvg}</div>
+                <div class="cats">
+                  ${gruposOrdenados.map(([nome, perc]) => `
+                    <div class="cat">
+                      <div class="name">${formatarNomeGrupo(nome)}</div>
+                      <div class="val">${perc}%</div>
+                    </div>
+                  `).join('')}
+                </div>
               </div>
             </div>
             <div class="card">
@@ -650,6 +749,8 @@
         const idRelatorio = Math.floor(Math.random() * 1000) + 1;
         const estagio = classificarEstagio(percentual);
         const recs = gerarRecomendacoes(dados.respostas);
+        const gruposOrdenados = obterGruposOrdenados(grupos);
+        const graficoIndiceSvg = gerarSvgIndiceCircularidade(grupos, percentual, 360);
 
         elementos.relatorioScreen.innerHTML = `
             <div class="bg-white rounded-xl shadow-2xl p-8 max-w-4xl mx-auto">
@@ -669,26 +770,26 @@
                         <p class="text-sm text-slate-700"><span class="font-semibold">Setor:</span> ${empresa.setorEconomico || '-'} </p>
                         <p class="text-sm text-slate-700"><span class="font-semibold">Produto:</span> ${empresa.produtoAvaliado || '-'} </p>
                     </div>
-                    <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                        <h3 class="font-semibold text-orange-900 mb-2">Resultado do Diagnóstico</h3>
-                        <p class="text-sm text-orange-800">Pontuação Total: <span class="font-bold">${pontos}</span> de ${totalPossivel} pontos</p>
-                        <p class="text-sm text-orange-800">Índice de Circularidade: <span class="font-bold">${percentual}%</span></p>
-                        <p class="text-sm text-orange-800">Índice de Maturidade Estruturante: <span class="font-bold">${maturidade}%</span></p>
-                        <p class="text-sm text-orange-800">Estágio: <span class="font-bold">${estagio}</span></p>
-                        <div class="mt-3">
-                            <div class="w-full bg-orange-100 rounded-full h-2">
-                                <div class="bg-orange-600 h-2 rounded-full" style="width: ${percentual}%"></div>
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                        <h3 class="font-semibold text-emerald-900 mb-2">Resultado do Diagnóstico</h3>
+                        <p class="text-sm text-emerald-800">Pontuação Total: <span class="font-bold">${pontos}</span> de ${totalPossivel} pontos</p>
+                        <p class="text-sm text-emerald-800">Índice de Circularidade: <span class="font-bold">${percentual}%</span></p>
+                        <p class="text-sm text-emerald-800">Índice de Maturidade Estruturante: <span class="font-bold">${maturidade}%</span></p>
+                        <p class="text-sm text-emerald-800">Estágio: <span class="font-bold">${estagio}</span></p>
+                        <div class="mt-4 grid md:grid-cols-2 gap-4 items-center">
+                            <div class="bg-white border border-emerald-200 rounded-lg p-2">
+                                ${graficoIndiceSvg}
                             </div>
-                            <p class="text-xs text-orange-700 mt-2 text-center">Circularidade alcançada: ${percentual}% · Potencial de melhoria: ${potencial}%</p>
+                            <div class="grid grid-cols-2 gap-2">
+                                ${gruposOrdenados.map(([nome, perc]) => `
+                                    <div class="text-center bg-white border border-emerald-200 rounded-lg p-2">
+                                        <div class="text-xs text-emerald-700 font-semibold">${formatarNomeGrupo(nome)}</div>
+                                        <div class="text-xl font-bold text-emerald-700">${perc}%</div>
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
-                        <div class="mt-4 grid md:grid-cols-5 gap-3">
-                            ${Object.entries(grupos).map(([nome, perc]) => `
-                                <div class="text-center bg-white border border-orange-200 rounded-lg p-2">
-                                    <div class="text-xs text-gray-500">${nome}</div>
-                                    <div class="text-lg font-bold text-orange-700">${perc}%</div>
-                                </div>
-                            `).join('')}
-                        </div>
+                        <p class="text-xs text-emerald-700 mt-3 text-center">Circularidade alcançada: ${percentual}% · Potencial de melhoria: ${potencial}%</p>
                     </div>
                 </div>
                 <div class="space-y-6">
