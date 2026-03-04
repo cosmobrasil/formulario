@@ -12,6 +12,7 @@ CREATE TABLE empresas (
     nome_responsavel VARCHAR(150) NOT NULL,
     email VARCHAR(255) NOT NULL,
     cidade VARCHAR(100) NOT NULL,
+    uf VARCHAR(2),
     celular VARCHAR(20) NOT NULL,
     setor_economico VARCHAR(100) NOT NULL,
     produto_avaliado VARCHAR(200) NOT NULL,
@@ -79,6 +80,7 @@ CREATE INDEX idx_questionarios_created_at ON questionarios(created_at);
 CREATE INDEX idx_empresas_email ON empresas(email);
 CREATE INDEX idx_empresas_cnpj ON empresas(cnpj);
 CREATE INDEX idx_empresas_cidade ON empresas(cidade);
+CREATE INDEX idx_empresas_uf ON empresas(uf);
 
 -- Função para atualizar updated_at automaticamente
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -101,6 +103,7 @@ CREATE VIEW vw_dados_dashboard AS
 SELECT 
     e.nome_empresa AS EMPRESA,
     e.cidade AS CIDADE,
+    e.uf AS UF,
     e.produto_avaliado AS PRODUTO,
     q.materia_prima AS MATERIA_PRIMA,
     q.residuos AS RESIDUOS,

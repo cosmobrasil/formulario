@@ -1,0 +1,4 @@
+ALTER TABLE empresas
+ADD COLUMN IF NOT EXISTS uf VARCHAR(2);
+
+CREATE INDEX IF NOT EXISTS idx_empresas_uf ON empresas(uf);

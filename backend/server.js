@@ -13,6 +13,8 @@ const PORT = process.env.PORT || 3000;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const ENABLE_DEBUG_ENDPOINTS = process.env.ENABLE_DEBUG_ENDPOINTS === 'true';
 const CNPJ_API_TIMEOUT_MS = parseInt(process.env.CNPJ_API_TIMEOUT_MS || '8000', 10);
+let hasUfColumn = false;
+let hasUnaccentExtension = false;
 
 // Inicializar serviço do Google Drive
 const driveService = new GoogleDriveService();
@@ -73,6 +75,35 @@ pool.on('error', (err) => {
     console.error('❌ Erro na conexão PostgreSQL:', err);
 });
 
+async function carregarRecursosBanco() {
+    try {
+        const result = await pool.query(`
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'empresas'
+                  AND column_name = 'uf'
+            ) AS has_uf,
+            EXISTS (
+                SELECT 1
+                FROM pg_extension
+                WHERE extname = 'unaccent'
+            ) AS has_unaccent;
+        `);
+        hasUfColumn = !!result.rows[0]?.has_uf;
+        hasUnaccentExtension = !!result.rows[0]?.has_unaccent;
+        console.log(`🧭 Coluna empresas.uf disponível: ${hasUfColumn ? 'SIM' : 'NÃO'}`);
+        console.log(`🧭 Extensão unaccent disponível: ${hasUnaccentExtension ? 'SIM' : 'NÃO'}`);
+    } catch (error) {
+        hasUfColumn = false;
+        hasUnaccentExtension = false;
+        console.warn('⚠️ Não foi possível validar coluna UF no banco.');
+    }
+}
+
+carregarRecursosBanco();
+
 // Testar conexão
 app.get('/api/health', async (req, res) => {
     try {
@@ -128,6 +159,99 @@ function limparCelular(celular) {
 function mascararCNPJ(cnpj) {
     if (!cnpj || cnpj.length !== 14) return '***';
     return `${cnpj.slice(0, 2)}********${cnpj.slice(-4)}`;
+}
+
+function normalizarFiltro(valor) {
+    const limpo = (valor || '').toString().trim();
+    return limpo.length > 0 ? limpo : null;
+}
+
+function normalizarTexto(valor) {
+    return (valor || '').toString().trim().replace(/\s+/g, ' ');
+}
+
+function normalizarCidade(valor) {
+    return normalizarTexto(valor).toUpperCase();
+}
+
+function normalizarSetor(valor) {
+    const t = normalizarTexto(valor).toLowerCase();
+    return t.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizarProduto(valor) {
+    return normalizarTexto(valor);
+}
+
+function normalizarUF(valor) {
+    const t = normalizarTexto(valor).replace(/\s+/g, '').toUpperCase();
+    return t ? t.slice(0, 2) : null;
+}
+
+function construirWhereDashboard(reqQuery) {
+    const params = [];
+    const filtros = [];
+    const campoNormalizado = (coluna) => hasUnaccentExtension
+        ? `UPPER(unaccent(TRIM(${coluna})))`
+        : `UPPER(TRIM(${coluna}))`;
+    const paramNormalizado = (idx) => hasUnaccentExtension
+        ? `UPPER(unaccent($${idx}))`
+        : `UPPER($${idx})`;
+
+    const setor = normalizarFiltro(reqQuery.setor);
+    const produto = normalizarFiltro(reqQuery.produto);
+    const cidade = normalizarFiltro(reqQuery.cidade);
+    const uf = normalizarFiltro(reqQuery.uf);
+    const dataInicio = normalizarFiltro(reqQuery.data_inicio);
+    const dataFim = normalizarFiltro(reqQuery.data_fim);
+
+    if (setor) {
+        params.push(setor);
+        filtros.push(`${campoNormalizado('e.setor_economico')} = ${paramNormalizado(params.length)}`);
+    }
+
+    if (produto) {
+        params.push(produto);
+        filtros.push(`${campoNormalizado('e.produto_avaliado')} = ${paramNormalizado(params.length)}`);
+    }
+
+    if (cidade) {
+        params.push(cidade);
+        filtros.push(`${campoNormalizado('e.cidade')} = ${paramNormalizado(params.length)}`);
+    }
+
+    if (uf && hasUfColumn) {
+        params.push(uf.toUpperCase());
+        filtros.push(`UPPER(e.uf) = $${params.length}`);
+    }
+
+    if (dataInicio) {
+        params.push(dataInicio);
+        filtros.push(`q.created_at::date >= $${params.length}::date`);
+    }
+
+    if (dataFim) {
+        params.push(dataFim);
+        filtros.push(`q.created_at::date <= $${params.length}::date`);
+    }
+
+    return {
+        whereClause: filtros.length ? `WHERE ${filtros.join(' AND ')}` : '',
+        params
+    };
+}
+
+function calcularPercentualPergunta(pergunta, mediaPontos) {
+    const maximos = { 1: 3, 2: 2, 5: 2, 6: 1 };
+    const maximo = maximos[pergunta] || 2;
+    const pontos = Number(mediaPontos || 0);
+    return Math.round((pontos / maximo) * 100);
+}
+
+function mediaPercentualPerguntas(listaPerguntas, medias) {
+    if (!listaPerguntas.length) return 0;
+    const soma = listaPerguntas.reduce((acc, id) => acc + calcularPercentualPergunta(id, medias[id]), 0);
+    return Math.round(soma / listaPerguntas.length);
 }
 
 // Endpoint para consulta de CNPJ via EmpresaAqui
@@ -253,24 +377,79 @@ app.post('/api/questionario', async (req, res) => {
         if (existingEmpresa.rows.length > 0) {
             // Empresa já existe - usar ID existente
             empresaId = existingEmpresa.rows[0].id;
+            if (hasUfColumn) {
+                await client.query(
+                    `UPDATE empresas
+                     SET nome_empresa = $1,
+                         nome_responsavel = $2,
+                         email = $3,
+                         cidade = $4,
+                         celular = $5,
+                         setor_economico = $6,
+                         produto_avaliado = $7,
+                         uf = $8
+                     WHERE id = $9`,
+                    [
+                        normalizarTexto(empresa.nomeEmpresa),
+                        normalizarTexto(empresa.nomeResponsavel),
+                        normalizarTexto(empresa.email).toLowerCase(),
+                        normalizarCidade(empresa.cidade),
+                        celularLimpo,
+                        normalizarSetor(empresa.setorEconomico),
+                        normalizarProduto(empresa.produtoAvaliado),
+                        normalizarUF(empresa.uf),
+                        empresaId
+                    ]
+                );
+            } else {
+                await client.query(
+                    `UPDATE empresas
+                     SET nome_empresa = $1,
+                         nome_responsavel = $2,
+                         email = $3,
+                         cidade = $4,
+                         celular = $5,
+                         setor_economico = $6,
+                         produto_avaliado = $7
+                     WHERE id = $8`,
+                    [
+                        normalizarTexto(empresa.nomeEmpresa),
+                        normalizarTexto(empresa.nomeResponsavel),
+                        normalizarTexto(empresa.email).toLowerCase(),
+                        normalizarCidade(empresa.cidade),
+                        celularLimpo,
+                        normalizarSetor(empresa.setorEconomico),
+                        normalizarProduto(empresa.produtoAvaliado),
+                        empresaId
+                    ]
+                );
+            }
             console.log('📌 Empresa já cadastrada, reutilizando ID:', empresaId);
         } else {
             // Nova empresa - inserir com dados limpos
-            const empresaResult = await client.query(
-                `INSERT INTO empresas (nome_empresa, cnpj, nome_responsavel, email, cidade, celular, setor_economico, produto_avaliado)
+            const empresaValues = [
+                normalizarTexto(empresa.nomeEmpresa),
+                cnpjLimpo,
+                normalizarTexto(empresa.nomeResponsavel),
+                normalizarTexto(empresa.email).toLowerCase(),
+                normalizarCidade(empresa.cidade),
+                celularLimpo,
+                normalizarSetor(empresa.setorEconomico),
+                normalizarProduto(empresa.produtoAvaliado)
+            ];
+
+            let insertEmpresaSql = `INSERT INTO empresas (nome_empresa, cnpj, nome_responsavel, email, cidade, celular, setor_economico, produto_avaliado)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                 RETURNING id`,
-                [
-                    empresa.nomeEmpresa,
-                    cnpjLimpo,
-                    empresa.nomeResponsavel,
-                    empresa.email,
-                    empresa.cidade,
-                    celularLimpo,
-                    empresa.setorEconomico,
-                    empresa.produtoAvaliado
-                ]
-            );
+                 RETURNING id`;
+
+            if (hasUfColumn) {
+                empresaValues.push(normalizarUF(empresa.uf));
+                insertEmpresaSql = `INSERT INTO empresas (nome_empresa, cnpj, nome_responsavel, email, cidade, celular, setor_economico, produto_avaliado, uf)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                 RETURNING id`;
+            }
+
+            const empresaResult = await client.query(insertEmpresaSql, empresaValues);
             empresaId = empresaResult.rows[0].id;
             console.log('✅ Nova empresa cadastrada:', empresaId);
         }
@@ -374,6 +553,139 @@ app.get('/api/questionarios', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Erro interno ao buscar questionários.'
+        });
+    }
+});
+
+app.get('/api/dashboard/filters', async (req, res) => {
+    try {
+        const { whereClause, params } = construirWhereDashboard(req.query);
+        const ufSelect = hasUfColumn ? "NULLIF(UPPER(TRIM(e.uf)), '') AS uf" : 'NULL::text AS uf';
+        const setorSelect = hasUnaccentExtension
+            ? "INITCAP(LOWER(unaccent(TRIM(e.setor_economico)))) AS setor"
+            : "INITCAP(LOWER(TRIM(e.setor_economico))) AS setor";
+        const produtoSelect = hasUnaccentExtension
+            ? "INITCAP(LOWER(unaccent(TRIM(e.produto_avaliado)))) AS produto"
+            : "TRIM(e.produto_avaliado) AS produto";
+        const cidadeSelect = hasUnaccentExtension
+            ? "UPPER(unaccent(TRIM(e.cidade))) AS cidade"
+            : "UPPER(TRIM(e.cidade)) AS cidade";
+        const baseQuery = `
+            SELECT
+                ${setorSelect},
+                ${produtoSelect},
+                ${cidadeSelect},
+                ${ufSelect}
+            FROM questionarios q
+            INNER JOIN empresas e ON q.empresa_id = e.id
+            ${whereClause}
+        `;
+
+        const result = await pool.query(baseQuery, params);
+        const unico = (campo) => [...new Set(result.rows.map((r) => r[campo]).filter(Boolean))].sort();
+
+        res.json({
+            success: true,
+            data: {
+                setores: unico('setor'),
+                produtos: unico('produto'),
+                cidades: unico('cidade'),
+                ufs: unico('uf'),
+                hasUf: hasUfColumn
+            }
+        });
+    } catch (error) {
+        console.error('Erro ao buscar filtros do dashboard:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erro interno ao buscar filtros.'
+        });
+    }
+});
+
+app.get('/api/dashboard/overview', async (req, res) => {
+    try {
+        const { whereClause, params } = construirWhereDashboard(req.query);
+
+        const sql = `
+            SELECT
+                COUNT(*)::int AS total_formularios,
+                ROUND(AVG(q.soma)::numeric, 2) AS media_total_pontos,
+                ROUND(AVG(q.indice_global_circularidade)::numeric, 2) AS media_igc,
+                ROUND(AVG(q.indice_maturidade_estruturante)::numeric, 2) AS media_ime,
+                AVG(CASE q.materia_prima WHEN 1 THEN 0 WHEN 2 THEN 2 WHEN 3 THEN 3 WHEN 4 THEN 2 WHEN 5 THEN 1 ELSE 0 END)::numeric AS s1,
+                AVG(CASE q.residuos WHEN 1 THEN 0 WHEN 2 THEN 2 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s2,
+                AVG(CASE q.desmonte WHEN 1 THEN 2 WHEN 2 THEN 0 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s3,
+                AVG(CASE q.descarte WHEN 1 THEN 2 WHEN 2 THEN 0 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s4,
+                AVG(CASE q.recuperacao WHEN 1 THEN 0 WHEN 2 THEN 2 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s5,
+                AVG(CASE q.reciclagem WHEN 1 THEN 1 WHEN 2 THEN 0 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s6,
+                AVG(CASE q.durabilidade WHEN 1 THEN 2 WHEN 2 THEN 0 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s7,
+                AVG(CASE q.reparavel WHEN 1 THEN 2 WHEN 2 THEN 0 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s8,
+                AVG(CASE q.reaproveitavel WHEN 1 THEN 2 WHEN 2 THEN 0 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s9,
+                AVG(CASE q.ciclo_estendido WHEN 1 THEN 2 WHEN 2 THEN 0 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s10,
+                AVG(CASE q.ciclo_rastreado WHEN 1 THEN 2 WHEN 2 THEN 0 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s11,
+                AVG(CASE q.documentacao WHEN 1 THEN 2 WHEN 2 THEN 0 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s12
+            FROM questionarios q
+            INNER JOIN empresas e ON q.empresa_id = e.id
+            ${whereClause}
+        `;
+
+        const result = await pool.query(sql, params);
+        const row = result.rows[0] || {};
+
+        const totalFormularios = Number(row.total_formularios || 0);
+        const medias = {
+            1: Number(row.s1 || 0),
+            2: Number(row.s2 || 0),
+            3: Number(row.s3 || 0),
+            4: Number(row.s4 || 0),
+            5: Number(row.s5 || 0),
+            6: Number(row.s6 || 0),
+            7: Number(row.s7 || 0),
+            8: Number(row.s8 || 0),
+            9: Number(row.s9 || 0),
+            10: Number(row.s10 || 0),
+            11: Number(row.s11 || 0),
+            12: Number(row.s12 || 0)
+        };
+
+        const topicos = {
+            entrada: mediaPercentualPerguntas([1], medias),
+            residuos: mediaPercentualPerguntas([2], medias),
+            output: mediaPercentualPerguntas([3, 4, 5], medias),
+            vida: mediaPercentualPerguntas([6, 7, 8, 9], medias),
+            monitoramento: mediaPercentualPerguntas([10, 11, 12], medias)
+        };
+
+        const imeDimensoes = {
+            durabilidade: mediaPercentualPerguntas([7], medias),
+            designReparavel: mediaPercentualPerguntas([8], medias),
+            designReaproveitamento: mediaPercentualPerguntas([9], medias),
+            servicosCiclo: mediaPercentualPerguntas([10], medias),
+            rastreabilidade: mediaPercentualPerguntas([11], medias),
+            transparencia: mediaPercentualPerguntas([12], medias)
+        };
+
+        const mediaIgc = Number(row.media_igc || 0);
+        const mediaIme = Number(row.media_ime || 0);
+
+        res.json({
+            success: true,
+            data: {
+                totalFormularios,
+                mediaTotalPontos: Number(row.media_total_pontos || 0),
+                mediaIGC: mediaIgc,
+                mediaIME: mediaIme,
+                igcGap: Math.max(0, 100 - mediaIgc),
+                topicos,
+                imeDimensoes
+            }
+        });
+    } catch (error) {
+        console.error('Erro ao buscar overview do dashboard:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erro interno ao buscar indicadores.'
         });
     }
 });
