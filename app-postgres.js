@@ -85,12 +85,24 @@
         elementos.termosScreen.classList.remove('hidden');
     });
 
+    function normalizarCNPJ(valor) {
+        return (valor || '').replace(/\D/g, '').slice(0, 14);
+    }
+
     elementos.formIdentificacao.addEventListener('submit', function (e) {
         e.preventDefault();
 
+        const cnpjNormalizado = normalizarCNPJ(document.getElementById('cnpj').value);
+        if (cnpjNormalizado.length !== 14) {
+            mostrarFeedbackCNPJ('Informe um CNPJ válido com 14 dígitos.', 'text-red-600');
+            return;
+        }
+
+        document.getElementById('cnpj').value = cnpjNormalizado;
+
         dados.empresa = {
             nomeEmpresa: document.getElementById('nomeEmpresa').value,
-            cnpj: document.getElementById('cnpj').value,
+            cnpj: cnpjNormalizado,
             nomeResponsavel: document.getElementById('nomeResponsavel').value,
             cidade: document.getElementById('cidade').value,
             celular: document.getElementById('celular').value,
@@ -107,9 +119,16 @@
     const inputCNPJ = document.getElementById('cnpj');
     const feedbackCNPJ = document.getElementById('feedbackCNPJ');
 
+    if (inputCNPJ) {
+        inputCNPJ.addEventListener('input', () => {
+            inputCNPJ.value = normalizarCNPJ(inputCNPJ.value);
+        });
+    }
+
     if (btnConsultar) {
         btnConsultar.addEventListener('click', async () => {
-            const cnpj = inputCNPJ.value.replace(/\D/g, '');
+            const cnpj = normalizarCNPJ(inputCNPJ.value);
+            inputCNPJ.value = cnpj;
 
             if (cnpj.length !== 14) {
                 mostrarFeedbackCNPJ('Informe um CNPJ válido com 14 dígitos.', 'text-red-600');
