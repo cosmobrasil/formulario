@@ -141,9 +141,20 @@
                 mostrarFeedbackCNPJ('Buscando dados na Receita...', 'text-orange-600');
 
                 const response = await fetch(`${CONFIG.API_URL || ''}/api/cnpj/${cnpj}`);
-                const result = await response.json();
+                let result = null;
 
-                if (result.success && result.data) {
+                try {
+                    result = await response.json();
+                } catch (parseError) {
+                    result = {
+                        success: false,
+                        error: response.ok
+                            ? 'Resposta inválida do servidor.'
+                            : `Falha no servidor (${response.status}). Tente novamente.`
+                    };
+                }
+
+                if (response.ok && result.success && result.data) {
                     const d = result.data;
                     document.getElementById('nomeEmpresa').value = d.fantasia || d.razao || '';
                     document.getElementById('cidade').value = d.cidade || '';
@@ -155,7 +166,10 @@
 
                     mostrarFeedbackCNPJ('✅ Dados carregados com sucesso!', 'text-emerald-600');
                 } else {
-                    mostrarFeedbackCNPJ('❌ ' + (result.error || 'CNPJ não encontrado.'), 'text-red-600');
+                    const erroApi = (result && result.error)
+                        ? result.error
+                        : `Falha ao consultar CNPJ (${response.status}).`;
+                    mostrarFeedbackCNPJ('❌ ' + erroApi, 'text-red-600');
                 }
             } catch (error) {
                 console.error('Erro na consulta de CNPJ:', error);
