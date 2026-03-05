@@ -5,6 +5,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const path = require('path');
+const PDFDocument = require('pdfkit');
 require('dotenv').config();
 const GoogleDriveService = require('./google-drive-service');
 
@@ -13,6 +14,7 @@ const PORT = process.env.PORT || 3000;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const ENABLE_DEBUG_ENDPOINTS = process.env.ENABLE_DEBUG_ENDPOINTS === 'true';
 const CNPJ_API_TIMEOUT_MS = parseInt(process.env.CNPJ_API_TIMEOUT_MS || '8000', 10);
+const ADMIN_PANEL_TOKEN = (process.env.ADMIN_PANEL_TOKEN || '').trim();
 let hasUfColumn = false;
 let hasUnaccentExtension = false;
 
@@ -181,6 +183,76 @@ function normalizarSetor(valor) {
 
 function normalizarProduto(valor) {
     return normalizarTexto(valor);
+}
+
+function removerAcentos(valor) {
+    return normalizarTexto(valor).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function formatarProdutoExibicao(valor) {
+    const produto = normalizarTexto(valor);
+    const chave = removerAcentos(produto).toUpperCase();
+    const mapa = {
+        BONE: 'Boné',
+        EMBARCACAO: 'Embarcação'
+    };
+    return mapa[chave] || produto;
+}
+
+function verificarAcessoAdmin(req, res) {
+    if (!ADMIN_PANEL_TOKEN) return true;
+    const tokenInformado = (req.headers['x-admin-token'] || req.query.token || '').toString().trim();
+    if (tokenInformado === ADMIN_PANEL_TOKEN) return true;
+    res.status(401).json({
+        success: false,
+        error: 'Acesso não autorizado ao painel administrativo.'
+    });
+    return false;
+}
+
+function pontosPergunta(pergunta, resposta) {
+    const valor = Number(resposta || 0);
+    const mapaPorPergunta = {
+        1: { 1: 0, 2: 2, 3: 3, 4: 2, 5: 1 },
+        2: { 1: 0, 2: 2, 3: 1 },
+        5: { 1: 0, 2: 2, 3: 1 },
+        6: { 1: 1, 2: 0, 3: 1 }
+    };
+    const mapa = mapaPorPergunta[pergunta] || { 1: 2, 2: 0, 3: 1 };
+    return mapa[valor] ?? 0;
+}
+
+function percentualPergunta(pergunta, resposta) {
+    const maximos = { 1: 3, 2: 2, 5: 2, 6: 1 };
+    const maximo = maximos[pergunta] || 2;
+    const pontos = pontosPergunta(pergunta, resposta);
+    return Math.round((pontos / maximo) * 100);
+}
+
+function mediaCategoria(perguntas, respostas) {
+    const soma = perguntas.reduce((acc, p) => acc + percentualPergunta(p, respostas[p]), 0);
+    return perguntas.length > 0 ? Math.round(soma / perguntas.length) : 0;
+}
+
+function textoAlternativa(pergunta, resposta) {
+    const alternativas = {
+        1: { 1: 'Sim, totalmente reciclada', 2: 'Parcialmente reciclada', 3: 'Virgem (não reciclada)', 4: 'Mista', 5: 'Não sei' },
+        default: { 1: 'Sim', 2: 'Não', 3: 'Não sei' }
+    };
+    const mapa = alternativas[pergunta] || alternativas.default;
+    return mapa[Number(resposta)] || 'Não informado';
+}
+
+function formatarDataHora(value) {
+    const data = new Date(value);
+    return data.toLocaleString('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
 }
 
 function normalizarUF(valor) {
@@ -564,9 +636,7 @@ app.get('/api/dashboard/filters', async (req, res) => {
         const setorSelect = hasUnaccentExtension
             ? "INITCAP(LOWER(unaccent(TRIM(e.setor_economico)))) AS setor"
             : "INITCAP(LOWER(TRIM(e.setor_economico))) AS setor";
-        const produtoSelect = hasUnaccentExtension
-            ? "INITCAP(LOWER(unaccent(TRIM(e.produto_avaliado)))) AS produto"
-            : "TRIM(e.produto_avaliado) AS produto";
+        const produtoSelect = "INITCAP(LOWER(TRIM(e.produto_avaliado))) AS produto";
         const cidadeSelect = hasUnaccentExtension
             ? "UPPER(unaccent(TRIM(e.cidade))) AS cidade"
             : "UPPER(TRIM(e.cidade)) AS cidade";
@@ -582,13 +652,19 @@ app.get('/api/dashboard/filters', async (req, res) => {
         `;
 
         const result = await pool.query(baseQuery, params);
-        const unico = (campo) => [...new Set(result.rows.map((r) => r[campo]).filter(Boolean))].sort();
+        const unico = (campo, formatador = (v) => v) => {
+            const valores = result.rows
+                .map((r) => r[campo])
+                .filter(Boolean)
+                .map((v) => formatador(v));
+            return [...new Set(valores)].sort();
+        };
 
         res.json({
             success: true,
             data: {
                 setores: unico('setor'),
-                produtos: unico('produto'),
+                produtos: unico('produto', formatarProdutoExibicao),
                 cidades: unico('cidade'),
                 ufs: unico('uf'),
                 hasUf: hasUfColumn
@@ -687,6 +763,167 @@ app.get('/api/dashboard/overview', async (req, res) => {
             success: false,
             error: 'Erro interno ao buscar indicadores.'
         });
+    }
+});
+
+app.get('/api/admin/respostas', async (req, res) => {
+    if (!verificarAcessoAdmin(req, res)) return;
+
+    try {
+        const result = await pool.query(`
+            SELECT
+                q.id AS questionario_id,
+                q.created_at,
+                q.indice_global_circularidade,
+                q.indice_maturidade_estruturante,
+                e.nome_responsavel,
+                e.nome_empresa,
+                e.cidade,
+                e.uf,
+                e.produto_avaliado
+            FROM questionarios q
+            INNER JOIN empresas e ON q.empresa_id = e.id
+            ORDER BY q.created_at DESC
+        `);
+
+        res.json({
+            success: true,
+            data: result.rows.map((row) => ({
+                id: row.questionario_id,
+                nomeResponsavel: row.nome_responsavel,
+                nomeEmpresa: row.nome_empresa,
+                cidade: row.cidade,
+                uf: row.uf,
+                produto: formatarProdutoExibicao(row.produto_avaliado),
+                dataHora: formatarDataHora(row.created_at),
+                igc: Number(row.indice_global_circularidade || 0),
+                ime: Number(row.indice_maturidade_estruturante || 0)
+            }))
+        });
+    } catch (error) {
+        console.error('Erro ao listar respostas do painel admin:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erro interno ao listar respostas.'
+        });
+    }
+});
+
+app.get('/api/admin/respostas/:id/pdf', async (req, res) => {
+    if (!verificarAcessoAdmin(req, res)) return;
+
+    try {
+        const { id } = req.params;
+        const result = await pool.query(`
+            SELECT
+                q.id AS questionario_id,
+                q.created_at,
+                q.soma,
+                q.indice_global_circularidade,
+                q.indice_maturidade_estruturante,
+                q.materia_prima, q.residuos, q.desmonte, q.descarte, q.recuperacao, q.reciclagem,
+                q.durabilidade, q.reparavel, q.reaproveitavel, q.ciclo_estendido, q.ciclo_rastreado, q.documentacao,
+                e.nome_responsavel, e.nome_empresa, e.cidade, e.uf, e.setor_economico, e.produto_avaliado
+            FROM questionarios q
+            INNER JOIN empresas e ON q.empresa_id = e.id
+            WHERE q.id = $1
+        `, [id]);
+
+        if (!result.rowCount) {
+            return res.status(404).json({
+                success: false,
+                error: 'Relatório não encontrado.'
+            });
+        }
+
+        const row = result.rows[0];
+        const respostas = {
+            1: row.materia_prima,
+            2: row.residuos,
+            3: row.desmonte,
+            4: row.descarte,
+            5: row.recuperacao,
+            6: row.reciclagem,
+            7: row.durabilidade,
+            8: row.reparavel,
+            9: row.reaproveitavel,
+            10: row.ciclo_estendido,
+            11: row.ciclo_rastreado,
+            12: row.documentacao
+        };
+
+        const topicos = {
+            entrada: mediaCategoria([1], respostas),
+            residuos: mediaCategoria([2], respostas),
+            output: mediaCategoria([3, 4, 5], respostas),
+            vida: mediaCategoria([6, 7, 8, 9], respostas),
+            monitoramento: mediaCategoria([10, 11, 12], respostas)
+        };
+
+        const nomeEmpresaArquivo = (row.nome_empresa || 'empresa')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9_-]+/g, '_')
+            .slice(0, 60);
+        const fileName = `Relatorio_Circularidade_${nomeEmpresaArquivo}_${row.questionario_id}.pdf`;
+        const disposition = req.query.download === '1' ? 'attachment' : 'inline';
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `${disposition}; filename="${fileName}"`);
+
+        const doc = new PDFDocument({ size: 'A4', margin: 44 });
+        doc.pipe(res);
+
+        doc.fontSize(18).text('Relatório de Circularidade', { align: 'left' });
+        doc.moveDown(0.5);
+        doc.fontSize(10).fillColor('#444').text(`ID do Relatório: ${row.questionario_id}`);
+        doc.text(`Data/Hora: ${formatarDataHora(row.created_at)}`);
+        doc.moveDown(1);
+
+        doc.fillColor('#000').fontSize(12).text('Identificação');
+        doc.fontSize(10);
+        doc.text(`Empresa: ${row.nome_empresa}`);
+        doc.text(`Responsável: ${row.nome_responsavel}`);
+        doc.text(`Cidade/UF: ${row.cidade}${row.uf ? `/${row.uf}` : ''}`);
+        doc.text(`Setor: ${row.setor_economico}`);
+        doc.text(`Produto: ${formatarProdutoExibicao(row.produto_avaliado)}`);
+        doc.moveDown(1);
+
+        doc.fontSize(12).text('Indicadores Gerais');
+        doc.fontSize(10);
+        doc.text(`Pontuação total: ${row.soma}`);
+        doc.text(`Índice Global de Circularidade (IGC): ${Number(row.indice_global_circularidade || 0).toFixed(2)}%`);
+        doc.text(`Índice de Maturidade Estruturante (IME): ${Number(row.indice_maturidade_estruturante || 0).toFixed(2)}%`);
+        doc.moveDown(1);
+
+        doc.fontSize(12).text('Percentuais por Tópico');
+        doc.fontSize(10);
+        doc.text(`Entrada (Input): ${topicos.entrada}%`);
+        doc.text(`Gestão de Resíduos: ${topicos.residuos}%`);
+        doc.text(`Saída do Produto (Output): ${topicos.output}%`);
+        doc.text(`Vida do Produto: ${topicos.vida}%`);
+        doc.text(`Monitoramento: ${topicos.monitoramento}%`);
+        doc.moveDown(1);
+
+        doc.fontSize(12).text('Respostas por Questão');
+        doc.moveDown(0.2);
+        for (let i = 1; i <= 12; i += 1) {
+            const valor = respostas[i];
+            doc.fontSize(10).text(`Q${i}: ${textoAlternativa(i, valor)} (valor ${valor})`);
+        }
+
+        doc.moveDown(1.2);
+        doc.fontSize(9).fillColor('#555')
+            .text('Documento gerado automaticamente pelo backend da plataforma.', { align: 'left' });
+        doc.end();
+    } catch (error) {
+        console.error('Erro ao gerar PDF do painel admin:', error);
+        if (!res.headersSent) {
+            res.status(500).json({
+                success: false,
+                error: 'Erro interno ao gerar PDF.'
+            });
+        }
     }
 });
 
