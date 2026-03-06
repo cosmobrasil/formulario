@@ -97,18 +97,30 @@ button {
 
 .charts-grid {
   display: grid;
-  gap: .9rem;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.chart-panel h3 { margin-top: 0; }
-.chart-panel canvas { width: 100%; height: 280px !important; }
+.chart-panel {
+  padding: 1.15rem 1.15rem 1.35rem;
+}
+
+.chart-panel h3 {
+  margin: 0 0 .85rem;
+  font-size: 1.05rem;
+}
+
+.chart-panel canvas {
+  width: 100%;
+  height: 360px !important;
+}
+
 .tech-text { color: var(--muted); font-size: .86rem; margin: .55rem 0 0; line-height: 1.42; }
 
 .recomendacoes-grid {
   display: grid;
   gap: .8rem;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .rec-card {
@@ -118,6 +130,7 @@ button {
   padding: .8rem;
 }
 .rec-card h4 { margin: 0 0 .45rem; font-size: .94rem; }
+.rec-card p { margin: 0 0 .45rem; color: var(--muted); font-size: .83rem; }
 .rec-card ul { margin: 0; padding-left: 1rem; color: var(--muted); }
 .rec-card li { margin: .3rem 0; }
 
@@ -125,4 +138,5 @@ button {
   .topbar { flex-direction: column; align-items: flex-start; gap: .8rem; }
   .logo { width: 82px; }
   .actions-row { flex-direction: column; align-items: flex-start; }
+  .chart-panel canvas { height: 300px !important; }
 }

@@ -1,7 +1,9 @@
 (function () {
-  const API_BASE = window.location.hostname.includes('localhost')
+  const isLocal = window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1';
+  const isNetlify = window.location.hostname.endsWith('netlify.app');
+  const API_BASE = isLocal
     ? 'http://localhost:3000'
-    : 'https://formulario-production-8df7.up.railway.app';
+    : (isNetlify ? '' : 'https://formulario-production-8df7.up.railway.app');
 
   const el = {
     setor: document.getElementById('filtroSetor'),
@@ -219,6 +221,7 @@
       entrada: {
         icon: '📥',
         titulo: 'ENTRADA (INPUT)',
+        perguntas: 'Q1',
         itens: [
           'Explore fornecedores de matérias-primas recicladas.',
           'Implemente aproveitamento de resíduos de outras empresas.',
@@ -228,6 +231,7 @@
       residuos: {
         icon: '♻️',
         titulo: 'GESTÃO DE RESÍDUOS',
+        perguntas: 'Q2',
         itens: [
           'Desenvolva parcerias para reciclagem de resíduos.',
           'Implemente sistema de recuperação de energia.',
@@ -237,6 +241,7 @@
       output: {
         icon: '📦',
         titulo: 'SAÍDA DO PRODUTO (OUTPUT)',
+        perguntas: 'Q3, Q4, Q5',
         itens: [
           'Desenhe produtos para facilitar desmontagem.',
           'Utilize materiais mais recicláveis.',
@@ -246,6 +251,7 @@
       vida: {
         icon: '🔧',
         titulo: 'VIDA DO PRODUTO',
+        perguntas: 'Q6, Q7, Q8, Q9',
         itens: [
           'Invista em testes de durabilidade.',
           'Aprimore design para reparabilidade.',
@@ -255,6 +261,7 @@
       monitoramento: {
         icon: '📊',
         titulo: 'MONITORAMENTO',
+        perguntas: 'Q10, Q11, Q12',
         itens: [
           'Implemente serviços pós-venda.',
           'Use rastreamento (QR Code, chips).',
@@ -263,15 +270,17 @@
       }
     };
 
-    const ordem = Object.keys(topicos || {}).sort((a, b) => (topicos[a] || 0) - (topicos[b] || 0));
-    const foco = ordem.slice(0, 3);
+    const ordemFixa = ['entrada', 'residuos', 'output', 'vida', 'monitoramento'];
 
-    el.recomendacoes.innerHTML = foco
+    el.recomendacoes.innerHTML = ordemFixa
       .map((k) => {
         const rec = matriz[k];
+        const score = Number(topicos[k] || 0);
         return `
           <article class="rec-card">
             <h4>${rec.icon} ${rec.titulo}</h4>
+            <p><strong>Perguntas:</strong> ${rec.perguntas}</p>
+            <p><strong>Pontuação do tópico:</strong> ${score}%</p>
             <ul>
               ${rec.itens.map((item) => `<li>${item}</li>`).join('')}
             </ul>
