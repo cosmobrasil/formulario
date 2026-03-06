@@ -23,6 +23,55 @@
 
   const charts = {};
   let refreshTimer = null;
+  let chartPluginsRegistered = false;
+
+  function registerChartPlugins() {
+    if (chartPluginsRegistered) return;
+
+    Chart.register({
+      id: 'valueLabels',
+      afterDatasetsDraw(chart, args, pluginOptions) {
+        if (!pluginOptions || !pluginOptions.enabled || chart.config.type !== 'bar') return;
+        const { ctx } = chart;
+        const dataset = chart.data.datasets[0];
+        const meta = chart.getDatasetMeta(0);
+
+        ctx.save();
+        ctx.fillStyle = pluginOptions.color || '#ffffff';
+        ctx.font = `700 ${pluginOptions.fontSize || 12}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+
+        meta.data.forEach((bar, index) => {
+          const value = Number(dataset.data[index] || 0);
+          ctx.fillText(`${Math.round(value)}%`, bar.x, bar.y - 6);
+        });
+
+        ctx.restore();
+      }
+    });
+
+    Chart.register({
+      id: 'doughnutCenterText',
+      afterDatasetsDraw(chart, args, pluginOptions) {
+        if (!pluginOptions || !pluginOptions.enabled || chart.config.type !== 'doughnut') return;
+        const { ctx, chartArea } = chart;
+        const x = (chartArea.left + chartArea.right) / 2;
+        const y = (chartArea.top + chartArea.bottom) / 2;
+        const value = Number(pluginOptions.value || 0);
+
+        ctx.save();
+        ctx.fillStyle = pluginOptions.color || '#ffffff';
+        ctx.font = `700 ${pluginOptions.fontSize || 28}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${Math.round(value)}%`, x, y);
+        ctx.restore();
+      }
+    });
+
+    chartPluginsRegistered = true;
+  }
 
   function paramsToQuery(obj) {
     const p = new URLSearchParams();
@@ -104,6 +153,8 @@
   }
 
   function renderCharts(data) {
+    registerChartPlugins();
+
     const topicos = data.topicos || {};
     const ime = data.imeDimensoes || {};
 
@@ -119,7 +170,17 @@
           borderRadius: 6
         }]
       },
-      options: chartBaseOptions()
+      options: {
+        ...chartBaseOptions(),
+        plugins: {
+          ...chartBaseOptions().plugins,
+          valueLabels: {
+            enabled: true,
+            color: '#ffffff',
+            fontSize: 12
+          }
+        }
+      }
     });
 
     destroyChart('igc');
@@ -137,7 +198,15 @@
         responsive: true,
         maintainAspectRatio: false,
         cutout: '68%',
-        plugins: { legend: { labels: { color: '#dbe7ff' } } }
+        plugins: {
+          legend: { labels: { color: '#dbe7ff' } },
+          doughnutCenterText: {
+            enabled: true,
+            value: data.mediaIGC || 0,
+            color: '#ffffff',
+            fontSize: 28
+          }
+        }
       }
     });
 
