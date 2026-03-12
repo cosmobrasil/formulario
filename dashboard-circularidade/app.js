@@ -156,7 +156,7 @@
     registerChartPlugins();
 
     const topicos = data.topicos || {};
-    const ime = data.imeDimensoes || {};
+    const cosmob = data.cosmobIndicadores || {};
 
     destroyChart('topicos');
     charts.topicos = new Chart(document.getElementById('chartTopicos'), {
@@ -215,26 +215,31 @@
       type: 'radar',
       data: {
         labels: [
-          'Ensaios de durabilidade',
-          'Design reparável',
-          'Design para reaproveitamento',
-          'Serviços de extensão do ciclo',
-          'Rastreabilidade',
-          'Transparência das informações'
+          'De fonte renovável',
+          'Virgem',
+          'Reciclado',
+          'Reciclado permanentemente',
+          'Aterro',
+          'Reciclagem',
+          'Valorização energética'
         ],
         datasets: [{
-          label: 'IME (%)',
+          label: 'Indicadores estimados (%)',
           data: [
-            ime.durabilidade,
-            ime.designReparavel,
-            ime.designReaproveitamento,
-            ime.servicosCiclo,
-            ime.rastreabilidade,
-            ime.transparencia
+            cosmob.fonteRenovavel,
+            cosmob.virgem,
+            cosmob.reciclado,
+            cosmob.recicladoPermanentemente,
+            cosmob.aterro,
+            cosmob.reciclagem,
+            cosmob.valorizacaoEnergetica
           ],
-          backgroundColor: 'rgba(59, 130, 246, 0.25)',
-          borderColor: '#3b82f6',
-          pointBackgroundColor: '#93c5fd'
+          backgroundColor: 'rgba(16, 185, 129, 0.22)',
+          borderColor: '#10b981',
+          pointBackgroundColor: '#6ee7b7',
+          pointBorderColor: '#d1fae5',
+          pointHoverBackgroundColor: '#d1fae5',
+          pointHoverBorderColor: '#10b981'
         }]
       },
       options: {
@@ -250,7 +255,16 @@
             ticks: { color: '#9fb0d4', backdropColor: 'transparent' }
           }
         },
-        plugins: { legend: { labels: { color: '#dbe7ff' } } }
+        plugins: {
+          legend: { labels: { color: '#dbe7ff' } },
+          tooltip: {
+            callbacks: {
+              label(context) {
+                return `${context.label}: ${Math.round(Number(context.raw || 0))}%`;
+              }
+            }
+          }
+        }
       }
     });
 

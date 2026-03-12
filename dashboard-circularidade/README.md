@@ -28,3 +28,17 @@ Publicar esta pasta como site estático:
 ## Observação sobre UF
 Para filtros por estado, aplicar migration:
 - `backend/database/migrations/2026-03-04_add_uf_empresas.sql`
+
+## Configuração para Netlify
+Este projeto já inclui `netlify.toml` com:
+- publish da raiz (`.`)
+- proxy `/api/*` para o backend Railway
+- fallback SPA para `/index.html`
+
+### Passos rápidos
+1. Criar novo site no Netlify apontando para o repositório `cosmobrasil/dash-circular`.
+2. Build command: **(vazio)**
+3. Publish directory: `.`
+4. Deploy.
+
+Com o proxy ativo, o frontend usa `/api/...` no domínio do próprio Netlify e evita bloqueios de CORS no navegador.

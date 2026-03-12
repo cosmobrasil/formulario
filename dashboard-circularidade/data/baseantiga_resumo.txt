@@ -1,0 +1,5 @@
+Registros totais: 49
+Registros completos (12 questões): 36
+Média IGC calculada: 36.31
+Média IME calculada: 36.34
+CSV gerado: /Users/pvolkermini/APLICATIVO/COSMOBRASIL/QUESTIONARIO-CIRCULARIDADE-2026/dashboard-circularidade/data/baseantiga_processada.csv
