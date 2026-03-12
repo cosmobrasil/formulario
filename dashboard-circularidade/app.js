@@ -156,7 +156,7 @@
     registerChartPlugins();
 
     const topicos = data.topicos || {};
-    const cosmob = data.cosmobIndicadores || {};
+    const ime = data.imeDimensoes || {};
 
     destroyChart('topicos');
     charts.topicos = new Chart(document.getElementById('chartTopicos'), {
@@ -215,31 +215,26 @@
       type: 'radar',
       data: {
         labels: [
-          'De fonte renovável',
-          'Virgem',
-          'Reciclado',
-          'Reciclado permanentemente',
-          'Aterro',
-          'Reciclagem',
-          'Valorização energética'
+          'Ensaios de durabilidade',
+          'Design reparável',
+          'Design para reaproveitamento',
+          'Serviços de extensão do ciclo',
+          'Rastreabilidade',
+          'Transparência das informações'
         ],
         datasets: [{
-          label: 'Indicadores estimados (%)',
+          label: 'IME (%)',
           data: [
-            cosmob.fonteRenovavel,
-            cosmob.virgem,
-            cosmob.reciclado,
-            cosmob.recicladoPermanentemente,
-            cosmob.aterro,
-            cosmob.reciclagem,
-            cosmob.valorizacaoEnergetica
+            ime.durabilidade,
+            ime.designReparavel,
+            ime.designReaproveitamento,
+            ime.servicosCiclo,
+            ime.rastreabilidade,
+            ime.transparencia
           ],
-          backgroundColor: 'rgba(16, 185, 129, 0.22)',
-          borderColor: '#10b981',
-          pointBackgroundColor: '#6ee7b7',
-          pointBorderColor: '#d1fae5',
-          pointHoverBackgroundColor: '#d1fae5',
-          pointHoverBorderColor: '#10b981'
+          backgroundColor: 'rgba(59, 130, 246, 0.25)',
+          borderColor: '#3b82f6',
+          pointBackgroundColor: '#93c5fd'
         }]
       },
       options: {
@@ -255,16 +250,7 @@
             ticks: { color: '#9fb0d4', backdropColor: 'transparent' }
           }
         },
-        plugins: {
-          legend: { labels: { color: '#dbe7ff' } },
-          tooltip: {
-            callbacks: {
-              label(context) {
-                return `${context.label}: ${Math.round(Number(context.raw || 0))}%`;
-              }
-            }
-          }
-        }
+        plugins: { legend: { labels: { color: '#dbe7ff' } } }
       }
     });
 

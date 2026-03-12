@@ -255,88 +255,6 @@ function formatarDataHora(value) {
     });
 }
 
-function clampPercent(value) {
-    const n = Number(value || 0);
-    if (!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.min(100, n));
-}
-
-function percentualEscolha(count, total) {
-    const quantidade = Number(count || 0);
-    const base = Number(total || 0);
-    if (base <= 0) return 0;
-    return clampPercent(Math.round((quantidade / base) * 100));
-}
-
-function percentualPropensao(sim, nao, neutro) {
-    const yes = Number(sim || 0);
-    const no = Number(nao || 0);
-    const unknown = Number(neutro || 0);
-    const total = yes + no + unknown;
-    if (total <= 0) return 0;
-    return clampPercent(Math.round(((yes * 100) + (unknown * 50)) / total));
-}
-
-function normalizarDistribuicaoPercentual(valores) {
-    const entries = Object.entries(valores).map(([chave, valor]) => [chave, Math.max(0, Number(valor || 0))]);
-    const soma = entries.reduce((acc, [, valor]) => acc + valor, 0);
-    if (soma <= 0) {
-        return Object.fromEntries(entries.map(([chave]) => [chave, 0]));
-    }
-
-    const normalizados = {};
-    let acumulado = 0;
-    entries.forEach(([chave, valor], index) => {
-        if (index === entries.length - 1) {
-            normalizados[chave] = clampPercent(100 - acumulado);
-            return;
-        }
-        const percentual = clampPercent(Math.round((valor / soma) * 100));
-        normalizados[chave] = percentual;
-        acumulado += percentual;
-    });
-    return normalizados;
-}
-
-function calcularIndicadoresCosmobInferidos(distribuicoes) {
-    const totalFormularios = Number(distribuicoes.totalFormularios || 0);
-    const entradaFonteRenovavel = percentualEscolha(distribuicoes.mp4, totalFormularios);
-    const entradaVirgem = percentualEscolha(distribuicoes.mp1, totalFormularios);
-    const entradaReciclado = clampPercent(Math.round(
-        (percentualEscolha(distribuicoes.mp2, totalFormularios) * 0.75) +
-        (percentualEscolha(distribuicoes.mp3, totalFormularios) * 0.25)
-    ));
-    const reaproveitamentoMateria = percentualEscolha(distribuicoes.mp3, totalFormularios);
-    const designReaproveitamento = percentualPropensao(distribuicoes.q9Sim, distribuicoes.q9Nao, distribuicoes.q9Neutro);
-    const desmonteFacilitado = percentualPropensao(distribuicoes.q3Sim, distribuicoes.q3Nao, distribuicoes.q3Neutro);
-    const saidaBruta = normalizarDistribuicaoPercentual({
-        aterro:
-            (percentualPropensao(distribuicoes.q5Sim, distribuicoes.q5Nao, distribuicoes.q5Neutro) * 0.7) +
-            (percentualEscolha(distribuicoes.r2Aterro, totalFormularios) * 0.3),
-        reciclagem:
-            (percentualPropensao(distribuicoes.q4Sim, distribuicoes.q4Nao, distribuicoes.q4Neutro) * 0.5) +
-            (desmonteFacilitado * 0.2) +
-            (percentualEscolha(distribuicoes.r2Reciclagem, totalFormularios) * 0.3),
-        valorizacaoEnergetica:
-            (percentualPropensao(distribuicoes.q6Sim, distribuicoes.q6Nao, distribuicoes.q6Neutro) * 0.75) +
-            (percentualEscolha(distribuicoes.r2Energia, totalFormularios) * 0.25)
-    });
-
-    return {
-        fonteRenovavel: entradaFonteRenovavel,
-        virgem: entradaVirgem,
-        reciclado: entradaReciclado,
-        recicladoPermanentemente: clampPercent(Math.round(
-            (reaproveitamentoMateria * 0.55) +
-            (designReaproveitamento * 0.30) +
-            (desmonteFacilitado * 0.15)
-        )),
-        aterro: saidaBruta.aterro,
-        reciclagem: saidaBruta.reciclagem,
-        valorizacaoEnergetica: saidaBruta.valorizacaoEnergetica
-    };
-}
-
 function normalizarUF(valor) {
     const t = normalizarTexto(valor).replace(/\s+/g, '').toUpperCase();
     return t ? t.slice(0, 2) : null;
@@ -771,28 +689,6 @@ app.get('/api/dashboard/overview', async (req, res) => {
                 ROUND(AVG(q.soma)::numeric, 2) AS media_total_pontos,
                 ROUND(AVG(q.indice_global_circularidade)::numeric, 2) AS media_igc,
                 ROUND(AVG(q.indice_maturidade_estruturante)::numeric, 2) AS media_ime,
-                COUNT(*) FILTER (WHERE q.materia_prima = 1)::int AS mp1,
-                COUNT(*) FILTER (WHERE q.materia_prima = 2)::int AS mp2,
-                COUNT(*) FILTER (WHERE q.materia_prima = 3)::int AS mp3,
-                COUNT(*) FILTER (WHERE q.materia_prima = 4)::int AS mp4,
-                COUNT(*) FILTER (WHERE q.residuos = 1)::int AS r2_aterro,
-                COUNT(*) FILTER (WHERE q.residuos = 2)::int AS r2_reciclagem,
-                COUNT(*) FILTER (WHERE q.residuos = 3)::int AS r2_energia,
-                COUNT(*) FILTER (WHERE q.desmonte = 1)::int AS q3_sim,
-                COUNT(*) FILTER (WHERE q.desmonte = 2)::int AS q3_nao,
-                COUNT(*) FILTER (WHERE q.desmonte = 3)::int AS q3_neutro,
-                COUNT(*) FILTER (WHERE q.descarte = 1)::int AS q4_sim,
-                COUNT(*) FILTER (WHERE q.descarte = 2)::int AS q4_nao,
-                COUNT(*) FILTER (WHERE q.descarte = 3)::int AS q4_neutro,
-                COUNT(*) FILTER (WHERE q.recuperacao = 1)::int AS q5_sim,
-                COUNT(*) FILTER (WHERE q.recuperacao = 2)::int AS q5_nao,
-                COUNT(*) FILTER (WHERE q.recuperacao = 3)::int AS q5_neutro,
-                COUNT(*) FILTER (WHERE q.reciclagem = 1)::int AS q6_sim,
-                COUNT(*) FILTER (WHERE q.reciclagem = 2)::int AS q6_nao,
-                COUNT(*) FILTER (WHERE q.reciclagem = 3)::int AS q6_neutro,
-                COUNT(*) FILTER (WHERE q.reaproveitavel = 1)::int AS q9_sim,
-                COUNT(*) FILTER (WHERE q.reaproveitavel = 2)::int AS q9_nao,
-                COUNT(*) FILTER (WHERE q.reaproveitavel = 3)::int AS q9_neutro,
                 AVG(CASE q.materia_prima WHEN 1 THEN 0 WHEN 2 THEN 2 WHEN 3 THEN 3 WHEN 4 THEN 2 WHEN 5 THEN 1 ELSE 0 END)::numeric AS s1,
                 AVG(CASE q.residuos WHEN 1 THEN 0 WHEN 2 THEN 2 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s2,
                 AVG(CASE q.desmonte WHEN 1 THEN 2 WHEN 2 THEN 0 WHEN 3 THEN 1 ELSE 0 END)::numeric AS s3,
@@ -848,31 +744,6 @@ app.get('/api/dashboard/overview', async (req, res) => {
 
         const mediaIgc = Number(row.media_igc || 0);
         const mediaIme = Number(row.media_ime || 0);
-        const cosmobIndicadores = calcularIndicadoresCosmobInferidos({
-            totalFormularios,
-            mp1: row.mp1,
-            mp2: row.mp2,
-            mp3: row.mp3,
-            mp4: row.mp4,
-            q9Sim: row.q9_sim,
-            q9Nao: row.q9_nao,
-            q9Neutro: row.q9_neutro,
-            q5Sim: row.q5_sim,
-            q5Nao: row.q5_nao,
-            q5Neutro: row.q5_neutro,
-            q4Sim: row.q4_sim,
-            q4Nao: row.q4_nao,
-            q4Neutro: row.q4_neutro,
-            q3Sim: row.q3_sim,
-            q3Nao: row.q3_nao,
-            q3Neutro: row.q3_neutro,
-            q6Sim: row.q6_sim,
-            q6Nao: row.q6_nao,
-            q6Neutro: row.q6_neutro,
-            r2Aterro: row.r2_aterro,
-            r2Reciclagem: row.r2_reciclagem,
-            r2Energia: row.r2_energia
-        });
 
         res.json({
             success: true,
@@ -883,8 +754,7 @@ app.get('/api/dashboard/overview', async (req, res) => {
                 mediaIME: mediaIme,
                 igcGap: Math.max(0, 100 - mediaIgc),
                 topicos,
-                imeDimensoes,
-                cosmobIndicadores
+                imeDimensoes
             }
         });
     } catch (error) {
