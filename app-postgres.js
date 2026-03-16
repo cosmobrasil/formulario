@@ -105,6 +105,7 @@
             cnpj: cnpjNormalizado,
             nomeResponsavel: document.getElementById('nomeResponsavel').value,
             cidade: document.getElementById('cidade').value,
+            uf: dados.empresaUf || '',
             celular: document.getElementById('celular').value,
             email: document.getElementById('email').value,
             setorEconomico: document.getElementById('setorEconomico').value,
@@ -160,6 +161,7 @@
                     document.getElementById('cidade').value = d.cidade || '';
                     document.getElementById('email').value = d.email || '';
                     document.getElementById('celular').value = d.telefone || '';
+                    dados.empresaUf = d.uf || '';
 
                     // Tentar mapear setor pelo CNAE
                     mapearSetorPeloCNAE(d.cnae_principal);

@@ -255,6 +255,179 @@ function formatarDataHora(value) {
     });
 }
 
+function clampPercent(value) {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(100, n));
+}
+
+function percentualEscolha(count, total) {
+    const quantidade = Number(count || 0);
+    const base = Number(total || 0);
+    if (base <= 0) return 0;
+    return clampPercent(Math.round((quantidade / base) * 100));
+}
+
+function percentualPropensao(sim, nao, neutro) {
+    const yes = Number(sim || 0);
+    const no = Number(nao || 0);
+    const unknown = Number(neutro || 0);
+    const total = yes + no + unknown;
+    if (total <= 0) return 0;
+    return clampPercent(Math.round(((yes * 100) + (unknown * 50)) / total));
+}
+
+function normalizarDistribuicaoPercentual(valores) {
+    const entries = Object.entries(valores).map(([chave, valor]) => [chave, Math.max(0, Number(valor || 0))]);
+    const soma = entries.reduce((acc, [, valor]) => acc + valor, 0);
+    if (soma <= 0) {
+        return Object.fromEntries(entries.map(([chave]) => [chave, 0]));
+    }
+
+    const normalizados = {};
+    let acumulado = 0;
+    entries.forEach(([chave, valor], index) => {
+        if (index === entries.length - 1) {
+            normalizados[chave] = clampPercent(100 - acumulado);
+            return;
+        }
+        const percentual = clampPercent(Math.round((valor / soma) * 100));
+        normalizados[chave] = percentual;
+        acumulado += percentual;
+    });
+    return normalizados;
+}
+
+function calcularIndicadoresCosmobInferidos(distribuicoes) {
+    const totalFormularios = Number(distribuicoes.totalFormularios || 0);
+    const entradaFonteRenovavel = percentualEscolha(distribuicoes.mp4, totalFormularios);
+    const entradaVirgem = percentualEscolha(distribuicoes.mp1, totalFormularios);
+    const entradaReciclado = clampPercent(Math.round(
+        (percentualEscolha(distribuicoes.mp2, totalFormularios) * 0.75) +
+        (percentualEscolha(distribuicoes.mp3, totalFormularios) * 0.25)
+    ));
+    const reaproveitamentoMateria = percentualEscolha(distribuicoes.mp3, totalFormularios);
+    const designReaproveitamento = percentualPropensao(distribuicoes.q9Sim, distribuicoes.q9Nao, distribuicoes.q9Neutro);
+    const desmonteFacilitado = percentualPropensao(distribuicoes.q3Sim, distribuicoes.q3Nao, distribuicoes.q3Neutro);
+    const saidaBruta = normalizarDistribuicaoPercentual({
+        aterro:
+            (percentualPropensao(distribuicoes.q5Sim, distribuicoes.q5Nao, distribuicoes.q5Neutro) * 0.7) +
+            (percentualEscolha(distribuicoes.r2Aterro, totalFormularios) * 0.3),
+        reciclagem:
+            (percentualPropensao(distribuicoes.q4Sim, distribuicoes.q4Nao, distribuicoes.q4Neutro) * 0.5) +
+            (desmonteFacilitado * 0.2) +
+            (percentualEscolha(distribuicoes.r2Reciclagem, totalFormularios) * 0.3),
+        valorizacaoEnergetica:
+            (percentualPropensao(distribuicoes.q6Sim, distribuicoes.q6Nao, distribuicoes.q6Neutro) * 0.75) +
+            (percentualEscolha(distribuicoes.r2Energia, totalFormularios) * 0.25)
+    });
+
+    return {
+        fonteRenovavel: entradaFonteRenovavel,
+        virgem: entradaVirgem,
+        reciclado: entradaReciclado,
+        recicladoPermanentemente: clampPercent(Math.round(
+            (reaproveitamentoMateria * 0.55) +
+            (designReaproveitamento * 0.30) +
+            (desmonteFacilitado * 0.15)
+        )),
+        aterro: saidaBruta.aterro,
+        reciclagem: saidaBruta.reciclagem,
+        valorizacaoEnergetica: saidaBruta.valorizacaoEnergetica
+    };
+}
+
+function drawDoughnutIGC(doc, x, y, percentual) {
+    const p = clampPercent(percentual);
+    const radius = 58;
+    const innerRadius = 38;
+    const start = -Math.PI / 2;
+    const end = start + ((2 * Math.PI * p) / 100);
+    const startX = x + (Math.cos(start) * radius);
+    const startY = y + (Math.sin(start) * radius);
+
+    doc.save();
+    doc.lineWidth(0);
+    doc.circle(x, y, radius).fill('#334155');
+    if (p > 0) {
+        doc.fillColor('#22c55e');
+        doc.moveTo(x, y);
+        doc.lineTo(startX, startY);
+        doc.arc(x, y, radius, start, end);
+        doc.lineTo(x, y);
+        doc.fill();
+    }
+    doc.fillColor('#ffffff').circle(x, y, innerRadius).fill();
+    doc.restore();
+
+    doc.fillColor('#111827').fontSize(16).text(`${Math.round(p)}%`, x - 22, y - 10, { width: 44, align: 'center' });
+    doc.fillColor('#475569').fontSize(8).text('IGC', x - 22, y + 8, { width: 44, align: 'center' });
+}
+
+function drawTopicosBars(doc, x, y, topicos) {
+    const itens = [
+        { nome: 'Entrada', valor: clampPercent(topicos.entrada), cor: '#22c55e' },
+        { nome: 'Resíduos', valor: clampPercent(topicos.residuos), cor: '#06b6d4' },
+        { nome: 'Saída', valor: clampPercent(topicos.output), cor: '#6366f1' },
+        { nome: 'Vida', valor: clampPercent(topicos.vida), cor: '#f59e0b' },
+        { nome: 'Monitoramento', valor: clampPercent(topicos.monitoramento), cor: '#ef4444' }
+    ];
+    const larguraMax = 220;
+    let yy = y;
+
+    itens.forEach((item) => {
+        doc.fillColor('#1f2937').fontSize(9).text(item.nome, x, yy, { width: 80 });
+        doc.roundedRect(x + 84, yy + 2, larguraMax, 8, 3).fill('#334155');
+        doc.roundedRect(x + 84, yy + 2, (larguraMax * item.valor) / 100, 8, 3).fill(item.cor);
+        doc.fillColor('#cbd5e1').fontSize(8).text(`${item.valor}%`, x + 84 + larguraMax + 6, yy + 1, { width: 36 });
+        yy += 16;
+    });
+}
+
+function escreverRecomendacoes(doc, topicos, startY) {
+    const regras = [
+        {
+            chave: 'entrada',
+            titulo: 'Entrada (Input)',
+            texto: 'Ampliar fornecedores com materia-prima reciclada e rastreavel.'
+        },
+        {
+            chave: 'residuos',
+            titulo: 'Gestao de Residuos',
+            texto: 'Fortalecer segregacao, reuso interno e parcerias de recicladores.'
+        },
+        {
+            chave: 'output',
+            titulo: 'Saida do Produto',
+            texto: 'Melhorar design para desmontagem e estrutura de logistica reversa.'
+        },
+        {
+            chave: 'vida',
+            titulo: 'Vida do Produto',
+            texto: 'Priorizar durabilidade, reparabilidade e reaproveitamento modular.'
+        },
+        {
+            chave: 'monitoramento',
+            titulo: 'Monitoramento',
+            texto: 'Reforcar rastreabilidade e documentacao tecnica para transparencia.'
+        }
+    ];
+
+    const criticos = regras
+        .map((r) => ({ ...r, score: clampPercent(topicos[r.chave]) }))
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 3);
+
+    doc.fillColor('#0f172a').fontSize(12).text('Pontos Estrategicos de Atencao', 44, startY);
+    let y = startY + 16;
+    criticos.forEach((item, idx) => {
+        doc.fillColor('#334155').fontSize(9).text(`${idx + 1}. ${item.titulo} (${item.score}%)`, 44, y);
+        y += 12;
+        doc.fillColor('#475569').fontSize(9).text(item.texto, 54, y, { width: 500 });
+        y += 16;
+    });
+}
+
 function normalizarUF(valor) {
     const t = normalizarTexto(valor).replace(/\s+/g, '').toUpperCase();
     return t ? t.slice(0, 2) : null;
@@ -775,6 +948,7 @@ app.get('/api/dashboard/overview', async (req, res) => {
                 COUNT(*) FILTER (WHERE q.materia_prima = 2)::int AS mp2,
                 COUNT(*) FILTER (WHERE q.materia_prima = 3)::int AS mp3,
                 COUNT(*) FILTER (WHERE q.materia_prima = 4)::int AS mp4,
+                COUNT(*) FILTER (WHERE q.materia_prima = 5)::int AS mp5,
                 COUNT(*) FILTER (WHERE q.residuos = 1)::int AS r2_aterro,
                 COUNT(*) FILTER (WHERE q.residuos = 2)::int AS r2_reciclagem,
                 COUNT(*) FILTER (WHERE q.residuos = 3)::int AS r2_energia,
@@ -1004,47 +1178,53 @@ app.get('/api/admin/respostas/:id/pdf', async (req, res) => {
         const doc = new PDFDocument({ size: 'A4', margin: 44 });
         doc.pipe(res);
 
-        doc.fontSize(18).text('Relatório de Circularidade', { align: 'left' });
-        doc.moveDown(0.5);
-        doc.fontSize(10).fillColor('#444').text(`ID do Relatório: ${row.questionario_id}`);
-        doc.text(`Data/Hora: ${formatarDataHora(row.created_at)}`);
-        doc.moveDown(1);
+        const igc = clampPercent(row.indice_global_circularidade);
+        const ime = clampPercent(row.indice_maturidade_estruturante);
 
-        doc.fillColor('#000').fontSize(12).text('Identificação');
-        doc.fontSize(10);
-        doc.text(`Empresa: ${row.nome_empresa}`);
-        doc.text(`Responsável: ${row.nome_responsavel}`);
-        doc.text(`Cidade/UF: ${row.cidade}${row.uf ? `/${row.uf}` : ''}`);
-        doc.text(`Setor: ${row.setor_economico}`);
-        doc.text(`Produto: ${formatarProdutoExibicao(row.produto_avaliado)}`);
-        doc.moveDown(1);
+        doc.rect(0, 0, doc.page.width, 96).fill('#0f172a');
+        doc.fillColor('#f8fafc').fontSize(20).text('Relatorio de Circularidade', 44, 30);
+        doc.fillColor('#cbd5e1').fontSize(10).text(`ID: ${row.questionario_id}`, 44, 58);
+        doc.text(`Data/Hora: ${formatarDataHora(row.created_at)}`, 44, 72);
 
-        doc.fontSize(12).text('Indicadores Gerais');
-        doc.fontSize(10);
-        doc.text(`Pontuação total: ${row.soma}`);
-        doc.text(`Índice Global de Circularidade (IGC): ${Number(row.indice_global_circularidade || 0).toFixed(2)}%`);
-        doc.text(`Índice de Maturidade Estruturante (IME): ${Number(row.indice_maturidade_estruturante || 0).toFixed(2)}%`);
-        doc.moveDown(1);
+        doc.fillColor('#0f172a').fontSize(12).text('Identificacao', 44, 118);
+        doc.fillColor('#334155').fontSize(10);
+        doc.text(`Empresa: ${row.nome_empresa}`, 44, 136);
+        doc.text(`Responsavel: ${row.nome_responsavel}`, 44, 150);
+        doc.text(`Cidade/UF: ${row.cidade}${row.uf ? `/${row.uf}` : ''}`, 44, 164);
+        doc.text(`Setor: ${row.setor_economico}`, 44, 178);
+        doc.text(`Produto: ${formatarProdutoExibicao(row.produto_avaliado)}`, 44, 192);
 
-        doc.fontSize(12).text('Percentuais por Tópico');
-        doc.fontSize(10);
-        doc.text(`Entrada (Input): ${topicos.entrada}%`);
-        doc.text(`Gestão de Resíduos: ${topicos.residuos}%`);
-        doc.text(`Saída do Produto (Output): ${topicos.output}%`);
-        doc.text(`Vida do Produto: ${topicos.vida}%`);
-        doc.text(`Monitoramento: ${topicos.monitoramento}%`);
-        doc.moveDown(1);
+        doc.roundedRect(44, 222, 250, 90, 8).fill('#f1f5f9');
+        doc.fillColor('#0f172a').fontSize(11).text('Indicadores Gerais', 56, 236);
+        doc.fillColor('#334155').fontSize(10);
+        doc.text(`Pontuacao total: ${row.soma}`, 56, 254);
+        doc.text(`IGC: ${igc.toFixed(2)}%`, 56, 270);
+        doc.text(`IME: ${ime.toFixed(2)}%`, 56, 286);
 
-        doc.fontSize(12).text('Respostas por Questão');
-        doc.moveDown(0.2);
+        drawDoughnutIGC(doc, 396, 266, igc);
+        doc.fillColor('#334155').fontSize(9).text('Indice Global de Circularidade', 332, 332, { width: 130, align: 'center' });
+
+        doc.fillColor('#0f172a').fontSize(12).text('Percentual por Topico', 44, 356);
+        drawTopicosBars(doc, 44, 374, topicos);
+
+        escreverRecomendacoes(doc, topicos, 472);
+
+        doc.addPage();
+        doc.fillColor('#0f172a').fontSize(14).text('Respostas por Questao', 44, 44);
+        let y = 72;
         for (let i = 1; i <= 12; i += 1) {
             const valor = respostas[i];
-            doc.fontSize(10).text(`Q${i}: ${textoAlternativa(i, valor)} (valor ${valor})`);
+            const label = `Q${i}: ${textoAlternativa(i, valor)} (valor ${valor})`;
+            doc.fillColor('#334155').fontSize(10).text(label, 44, y, { width: 500 });
+            y += 18;
         }
 
-        doc.moveDown(1.2);
-        doc.fontSize(9).fillColor('#555')
-            .text('Documento gerado automaticamente pelo backend da plataforma.', { align: 'left' });
+        doc.fillColor('#64748b').fontSize(9).text(
+            'Documento gerado automaticamente pelo backend da plataforma. Relatorio sintetico para consulta gerencial.',
+            44,
+            300,
+            { width: 500 }
+        );
         doc.end();
     } catch (error) {
         console.error('Erro ao gerar PDF do painel admin:', error);

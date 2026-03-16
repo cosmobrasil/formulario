@@ -1,5 +1,14 @@
 # Questionário de Circularidade 2.0 - 2026
 
+## Aplicativos na pasta
+
+Esta pasta contem 3 aplicativos:
+
+1. Formulario principal: `index.html`
+2. Dashboard analitico: `dashboard-circularidade/`
+3. Dashboard gerencial: `dashboard-gerencial/`
+
+
 ## 🚀 Status Atual
 
 ✅ **Projeto 2026 configurado com sucesso!**
