@@ -152,11 +152,28 @@
     };
   }
 
+  function numeroSeguro(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
   function renderCharts(data) {
     registerChartPlugins();
 
     const topicos = data.topicos || {};
-    const cosmob = data.cosmobIndicadores || {};
+    const cosmobRaw = data.cosmobIndicadores || {};
+    if (!data.cosmobIndicadores) {
+      console.warn('Dashboard sem cosmobIndicadores no payload /api/dashboard/overview.');
+    }
+    const cosmob = {
+      fonteRenovavel: numeroSeguro(cosmobRaw.fonteRenovavel),
+      virgem: numeroSeguro(cosmobRaw.virgem),
+      reciclado: numeroSeguro(cosmobRaw.reciclado),
+      recicladoPermanentemente: numeroSeguro(cosmobRaw.recicladoPermanentemente),
+      aterro: numeroSeguro(cosmobRaw.aterro),
+      reciclagem: numeroSeguro(cosmobRaw.reciclagem),
+      valorizacaoEnergetica: numeroSeguro(cosmobRaw.valorizacaoEnergetica)
+    };
 
     destroyChart('topicos');
     charts.topicos = new Chart(document.getElementById('chartTopicos'), {
