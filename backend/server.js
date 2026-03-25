@@ -6,7 +6,7 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const path = require('path');
 const PDFDocument = require('pdfkit');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const GoogleDriveService = require('./google-drive-service');
 
 const app = express();
@@ -334,6 +334,187 @@ function calcularIndicadoresCosmobInferidos(distribuicoes) {
         aterro: saidaBruta.aterro,
         reciclagem: saidaBruta.reciclagem,
         valorizacaoEnergetica: saidaBruta.valorizacaoEnergetica
+    };
+}
+
+function mediaDistribuicaoPercentual(total, distribuicao, pesos) {
+    const base = Number(total || 0);
+    if (base <= 0) return 0;
+
+    return Object.entries(pesos).reduce((acc, [chave, peso]) => {
+        const quantidade = Number(distribuicao[chave] || 0);
+        return acc + ((quantidade / base) * peso);
+    }, 0);
+}
+
+function calcularPerfilCircularidadeMateriais(respostas = {}) {
+    const pontuacoes = {
+        1: { 1: 0, 2: 80, 3: 100, 4: 80, 5: 25 },
+        2: { 1: 0, 2: 100, 3: 40 },
+        3: { 1: 100, 2: 0, 3: 50 },
+        4: { 1: 100, 2: 0, 3: 50 },
+        5: { 1: 0, 2: 100, 3: 50 },
+        6: { 1: 40, 2: 100, 3: 50 },
+        9: { 1: 100, 2: 0, 3: 50 }
+    };
+
+    const pesos = {
+        1: 0.15,
+        2: 0.15,
+        3: 0.10,
+        4: 0.15,
+        5: 0.15,
+        6: 0.10,
+        9: 0.20
+    };
+
+    const scorePergunta = (qid) => {
+        const mapa = pontuacoes[qid];
+        const valor = Number(respostas[qid]);
+        if (!mapa || !Number.isFinite(valor)) return 0;
+        return Number(mapa[valor] || 0);
+    };
+
+    const componentes = {
+        entrada: scorePergunta(1),
+        residuos: scorePergunta(2),
+        desmonte: scorePergunta(3),
+        reciclabilidade: scorePergunta(4),
+        aterro: scorePergunta(5),
+        recuperacaoEnergia: scorePergunta(6),
+        reaproveitamento: scorePergunta(9)
+    };
+
+    const indice = Math.round(
+        (componentes.entrada * pesos[1]) +
+        (componentes.residuos * pesos[2]) +
+        (componentes.desmonte * pesos[3]) +
+        (componentes.reciclabilidade * pesos[4]) +
+        (componentes.aterro * pesos[5]) +
+        (componentes.recuperacaoEnergia * pesos[6]) +
+        (componentes.reaproveitamento * pesos[9])
+    );
+
+    return {
+        indice,
+        componentes
+    };
+}
+
+function calcularPerfilCircularidadeMateriaisAgregado(distribuicoes = {}) {
+    const totalFormularios = Number(distribuicoes.totalFormularios || 0);
+    if (totalFormularios <= 0) {
+        return {
+            indice: 0,
+            componentes: {
+                entrada: 0,
+                residuos: 0,
+                desmonte: 0,
+                reciclabilidade: 0,
+                aterro: 0,
+                recuperacaoEnergia: 0,
+                reaproveitamento: 0
+            }
+        };
+    }
+
+    const q1 = mediaDistribuicaoPercentual(totalFormularios, {
+        mp1: distribuicoes.mp1,
+        mp2: distribuicoes.mp2,
+        mp3: distribuicoes.mp3,
+        mp4: distribuicoes.mp4,
+        mp5: distribuicoes.mp5
+    }, {
+        mp1: 0,
+        mp2: 80,
+        mp3: 100,
+        mp4: 80,
+        mp5: 25
+    });
+
+    const q2 = mediaDistribuicaoPercentual(totalFormularios, {
+        r2Aterro: distribuicoes.r2Aterro,
+        r2Reciclagem: distribuicoes.r2Reciclagem,
+        r2Energia: distribuicoes.r2Energia
+    }, {
+        r2Aterro: 0,
+        r2Reciclagem: 100,
+        r2Energia: 40
+    });
+
+    const q3 = mediaDistribuicaoPercentual(totalFormularios, {
+        q3Sim: distribuicoes.q3Sim,
+        q3Nao: distribuicoes.q3Nao,
+        q3Neutro: distribuicoes.q3Neutro
+    }, {
+        q3Sim: 100,
+        q3Nao: 0,
+        q3Neutro: 50
+    });
+
+    const q4 = mediaDistribuicaoPercentual(totalFormularios, {
+        q4Sim: distribuicoes.q4Sim,
+        q4Nao: distribuicoes.q4Nao,
+        q4Neutro: distribuicoes.q4Neutro
+    }, {
+        q4Sim: 100,
+        q4Nao: 0,
+        q4Neutro: 50
+    });
+
+    const q5 = mediaDistribuicaoPercentual(totalFormularios, {
+        q5Sim: distribuicoes.q5Sim,
+        q5Nao: distribuicoes.q5Nao,
+        q5Neutro: distribuicoes.q5Neutro
+    }, {
+        q5Sim: 0,
+        q5Nao: 100,
+        q5Neutro: 50
+    });
+
+    const q6 = mediaDistribuicaoPercentual(totalFormularios, {
+        q6Sim: distribuicoes.q6Sim,
+        q6Nao: distribuicoes.q6Nao,
+        q6Neutro: distribuicoes.q6Neutro
+    }, {
+        q6Sim: 40,
+        q6Nao: 100,
+        q6Neutro: 50
+    });
+
+    const q9 = mediaDistribuicaoPercentual(totalFormularios, {
+        q9Sim: distribuicoes.q9Sim,
+        q9Nao: distribuicoes.q9Nao,
+        q9Neutro: distribuicoes.q9Neutro
+    }, {
+        q9Sim: 100,
+        q9Nao: 0,
+        q9Neutro: 50
+    });
+
+    const componentes = {
+        entrada: Math.round(q1),
+        residuos: Math.round(q2),
+        desmonte: Math.round(q3),
+        reciclabilidade: Math.round(q4),
+        aterro: Math.round(q5),
+        recuperacaoEnergia: Math.round(q6),
+        reaproveitamento: Math.round(q9)
+    };
+
+    const indice = Math.round(
+        (componentes.entrada * 0.15) +
+        (componentes.residuos * 0.15) +
+        (componentes.desmonte * 0.10) +
+        (componentes.reciclabilidade * 0.15) +
+        (componentes.aterro * 0.15) +
+        (componentes.recuperacaoEnergia * 0.10) +
+        (componentes.reaproveitamento * 0.20)
+    );
+
+    return {
+        indice,
+        componentes
     };
 }
 
@@ -805,7 +986,7 @@ app.post('/api/questionario', async (req, res) => {
                 respostas.documentacao,
                 pontuacao.pontos,
                 pontuacao.percentual,
-                pontuacao.maturidade
+                Number(pontuacao.perfilCircularidadeMateriais ?? pontuacao.maturidade ?? 0)
             ]
         );
 
@@ -943,7 +1124,6 @@ app.get('/api/dashboard/overview', async (req, res) => {
                 COUNT(*)::int AS total_formularios,
                 ROUND(AVG(q.soma)::numeric, 2) AS media_total_pontos,
                 ROUND(AVG(q.indice_global_circularidade)::numeric, 2) AS media_igc,
-                ROUND(AVG(q.indice_maturidade_estruturante)::numeric, 2) AS media_ime,
                 COUNT(*) FILTER (WHERE q.materia_prima = 1)::int AS mp1,
                 COUNT(*) FILTER (WHERE q.materia_prima = 2)::int AS mp2,
                 COUNT(*) FILTER (WHERE q.materia_prima = 3)::int AS mp3,
@@ -1011,23 +1191,40 @@ app.get('/api/dashboard/overview', async (req, res) => {
             monitoramento: mediaPercentualPerguntas([10, 11, 12], medias)
         };
 
-        const imeDimensoes = {
-            durabilidade: mediaPercentualPerguntas([7], medias),
-            designReparavel: mediaPercentualPerguntas([8], medias),
-            designReaproveitamento: mediaPercentualPerguntas([9], medias),
-            servicosCiclo: mediaPercentualPerguntas([10], medias),
-            rastreabilidade: mediaPercentualPerguntas([11], medias),
-            transparencia: mediaPercentualPerguntas([12], medias)
-        };
-
         const mediaIgc = Number(row.media_igc || 0);
-        const mediaIme = Number(row.media_ime || 0);
+        const perfilCircularidadeMateriais = calcularPerfilCircularidadeMateriaisAgregado({
+            totalFormularios,
+            mp1: row.mp1,
+            mp2: row.mp2,
+            mp3: row.mp3,
+            mp4: row.mp4,
+            mp5: row.mp5,
+            r2Aterro: row.r2_aterro,
+            r2Reciclagem: row.r2_reciclagem,
+            r2Energia: row.r2_energia,
+            q3Sim: row.q3_sim,
+            q3Nao: row.q3_nao,
+            q3Neutro: row.q3_neutro,
+            q4Sim: row.q4_sim,
+            q4Nao: row.q4_nao,
+            q4Neutro: row.q4_neutro,
+            q5Sim: row.q5_sim,
+            q5Nao: row.q5_nao,
+            q5Neutro: row.q5_neutro,
+            q6Sim: row.q6_sim,
+            q6Nao: row.q6_nao,
+            q6Neutro: row.q6_neutro,
+            q9Sim: row.q9_sim,
+            q9Nao: row.q9_nao,
+            q9Neutro: row.q9_neutro
+        });
         const cosmobIndicadores = calcularIndicadoresCosmobInferidos({
             totalFormularios,
             mp1: row.mp1,
             mp2: row.mp2,
             mp3: row.mp3,
             mp4: row.mp4,
+            mp5: row.mp5,
             q9Sim: row.q9_sim,
             q9Nao: row.q9_nao,
             q9Neutro: row.q9_neutro,
@@ -1054,10 +1251,12 @@ app.get('/api/dashboard/overview', async (req, res) => {
                 totalFormularios,
                 mediaTotalPontos: Number(row.media_total_pontos || 0),
                 mediaIGC: mediaIgc,
-                mediaIME: mediaIme,
+                mediaPCM: perfilCircularidadeMateriais.indice,
+                mediaIME: perfilCircularidadeMateriais.indice,
                 igcGap: Math.max(0, 100 - mediaIgc),
                 topicos,
-                imeDimensoes,
+                pcmDimensoes: perfilCircularidadeMateriais.componentes,
+                imeDimensoes: perfilCircularidadeMateriais.componentes,
                 cosmobIndicadores
             }
         });
@@ -1084,7 +1283,9 @@ app.get('/api/admin/respostas', async (req, res) => {
                 e.nome_empresa,
                 e.cidade,
                 e.uf,
-                e.produto_avaliado
+                e.produto_avaliado,
+                q.materia_prima, q.residuos, q.desmonte, q.descarte, q.recuperacao, q.reciclagem,
+                q.durabilidade, q.reparavel, q.reaproveitavel, q.ciclo_estendido, q.ciclo_rastreado, q.documentacao
             FROM questionarios q
             INNER JOIN empresas e ON q.empresa_id = e.id
             ORDER BY q.created_at DESC
@@ -1101,6 +1302,20 @@ app.get('/api/admin/respostas', async (req, res) => {
                 produto: formatarProdutoExibicao(row.produto_avaliado),
                 dataHora: formatarDataHora(row.created_at),
                 igc: Number(row.indice_global_circularidade || 0),
+                pcm: calcularPerfilCircularidadeMateriais({
+                    1: row.materia_prima,
+                    2: row.residuos,
+                    3: row.desmonte,
+                    4: row.descarte,
+                    5: row.recuperacao,
+                    6: row.reciclagem,
+                    7: row.durabilidade,
+                    8: row.reparavel,
+                    9: row.reaproveitavel,
+                    10: row.ciclo_estendido,
+                    11: row.ciclo_rastreado,
+                    12: row.documentacao
+                }).indice,
                 ime: Number(row.indice_maturidade_estruturante || 0)
             }))
         });
@@ -1141,6 +1356,20 @@ app.get('/api/admin/respostas/:id/pdf', async (req, res) => {
         }
 
         const row = result.rows[0];
+        const perfilCircularidadeMateriais = calcularPerfilCircularidadeMateriais({
+            1: row.materia_prima,
+            2: row.residuos,
+            3: row.desmonte,
+            4: row.descarte,
+            5: row.recuperacao,
+            6: row.reciclagem,
+            7: row.durabilidade,
+            8: row.reparavel,
+            9: row.reaproveitavel,
+            10: row.ciclo_estendido,
+            11: row.ciclo_rastreado,
+            12: row.documentacao
+        });
         const respostas = {
             1: row.materia_prima,
             2: row.residuos,
@@ -1179,7 +1408,7 @@ app.get('/api/admin/respostas/:id/pdf', async (req, res) => {
         doc.pipe(res);
 
         const igc = clampPercent(row.indice_global_circularidade);
-        const ime = clampPercent(row.indice_maturidade_estruturante);
+        const pcm = clampPercent(perfilCircularidadeMateriais.indice);
 
         doc.rect(0, 0, doc.page.width, 96).fill('#0f172a');
         doc.fillColor('#f8fafc').fontSize(20).text('Relatorio de Circularidade', 44, 30);
@@ -1199,7 +1428,7 @@ app.get('/api/admin/respostas/:id/pdf', async (req, res) => {
         doc.fillColor('#334155').fontSize(10);
         doc.text(`Pontuacao total: ${row.soma}`, 56, 254);
         doc.text(`IGC: ${igc.toFixed(2)}%`, 56, 270);
-        doc.text(`IME: ${ime.toFixed(2)}%`, 56, 286);
+        doc.text(`PCM: ${pcm.toFixed(2)}%`, 56, 286);
 
         drawDoughnutIGC(doc, 396, 266, igc);
         doc.fillColor('#334155').fontSize(9).text('Indice Global de Circularidade', 332, 332, { width: 130, align: 'center' });

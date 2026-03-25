@@ -185,6 +185,7 @@
 
             // Calcular pontuação
             const { pontos, totalPossivel, percentual, maturidade } = calcularPontuacao();
+            const perfilCircularidadeMateriais = calcularPerfilCircularidadeMateriais(dados.respostas);
 
             // Preparar dados do questionário usando o mapeamento
             const respostasMapeadas = Object.entries(CONFIG.MAPEAMENTO_RESPOSTAS || MAP_DEFAULT).reduce((acc, [id, coluna]) => {
@@ -203,7 +204,7 @@
             const htmlEmail = construirHtmlEmailRelatorio({
                 empresa,
                 percentual,
-                maturidade,
+                perfilCircularidadeMateriais,
                 estagio,
                 grupos: calcularPontuacao().grupos,
                 recs,
@@ -224,7 +225,12 @@
                 body: JSON.stringify({
                     empresa: dados.empresa,
                     respostas: respostasMapeadas,
-                    pontuacao: { pontos, percentual, maturidade },
+                    pontuacao: {
+                        pontos,
+                        percentual,
+                        maturidade: perfilCircularidadeMateriais.indice,
+                        perfilCircularidadeMateriais: perfilCircularidadeMateriais.indice
+                    },
                     relatorioHtml: htmlEmail  // Enviar HTML para salvar no Drive
                 })
             });
@@ -301,7 +307,7 @@
 
         const percentual = totalPossivel > 0 ? Math.round((pontos / totalPossivel) * 100) : 0;
 
-        // Cálculo por grupos e índice de maturidade (média ponderada dos grupos)
+        // Cálculo por grupos para consolidar a leitura do perfil por dimensão
         const grupos = {};
         let somaPesos = 0;
         let somaPonderada = 0;
@@ -324,6 +330,57 @@
         const maturidade = somaPesos > 0 ? Math.round(somaPonderada / somaPesos) : percentual;
 
         return { pontos, totalPossivel, percentual, grupos, maturidade };
+    }
+
+    function calcularPerfilCircularidadeMateriais(respostas) {
+        const pontuacoes = {
+            1: { 1: 0, 2: 80, 3: 100, 4: 80, 5: 25 },
+            2: { 1: 0, 2: 100, 3: 40 },
+            3: { 1: 100, 2: 0, 3: 50 },
+            4: { 1: 100, 2: 0, 3: 50 },
+            5: { 1: 0, 2: 100, 3: 50 },
+            6: { 1: 40, 2: 100, 3: 50 },
+            9: { 1: 100, 2: 0, 3: 50 }
+        };
+
+        const pesos = {
+            1: 0.15,
+            2: 0.15,
+            3: 0.10,
+            4: 0.15,
+            5: 0.15,
+            6: 0.10,
+            9: 0.20
+        };
+
+        const scorePergunta = (qid) => {
+            const mapa = pontuacoes[qid];
+            const valor = Number(respostas[qid]);
+            if (!mapa || !Number.isFinite(valor)) return 0;
+            return Number(mapa[valor] || 0);
+        };
+
+        const componentes = {
+            entrada: scorePergunta(1),
+            residuos: scorePergunta(2),
+            desmonte: scorePergunta(3),
+            reciclabilidade: scorePergunta(4),
+            aterro: scorePergunta(5),
+            recuperacaoEnergia: scorePergunta(6),
+            reaproveitamento: scorePergunta(9)
+        };
+
+        const indice = Math.round(
+            (componentes.entrada * pesos[1]) +
+            (componentes.residuos * pesos[2]) +
+            (componentes.desmonte * pesos[3]) +
+            (componentes.reciclabilidade * pesos[4]) +
+            (componentes.aterro * pesos[5]) +
+            (componentes.recuperacaoEnergia * pesos[6]) +
+            (componentes.reaproveitamento * pesos[9])
+        );
+
+        return { indice, componentes };
     }
 
     function classificarEstagio(percentual) {
@@ -380,7 +437,8 @@
     async function mostrarRelatorio() {
         elementos.confirmacaoScreen.classList.add('hidden');
         elementos.relatorioScreen.classList.remove('hidden');
-        const { pontos, totalPossivel, percentual, grupos, maturidade } = calcularPontuacao();
+        const { pontos, totalPossivel, percentual, grupos } = calcularPontuacao();
+        const perfilCircularidadeMateriais = calcularPerfilCircularidadeMateriais(dados.respostas);
         const potencial = 100 - percentual;
         const empresa = dados.empresa || {};
         const data = new Date();
@@ -410,7 +468,7 @@
                         <h3 class="font-semibold text-emerald-900 mb-2">Resultado do Diagnóstico</h3>
                         <p class="text-sm text-emerald-800">Pontuação Total: <span class="font-bold">${pontos}</span> de ${totalPossivel} pontos</p>
                         <p class="text-sm text-emerald-800">Índice de Circularidade: <span class="font-bold">${percentual}%</span></p>
-                        <p class="text-sm text-emerald-800">Índice de Maturidade Estruturante: <span class="font-bold">${maturidade}%</span></p>
+                        <p class="text-sm text-emerald-800">Perfil de Circularidade de Materiais: <span class="font-bold">${perfilCircularidadeMateriais.indice}%</span></p>
                         <p class="text-sm text-emerald-800">Estágio: <span class="font-bold">${estagio}</span></p>
                         <div class="mt-3">
                             <div class="w-full bg-emerald-100 rounded-full h-2">
@@ -425,6 +483,14 @@
                                     <div class="text-lg font-bold text-emerald-700">${perc}%</div>
                                 </div>
                             `).join('')}
+                        </div>
+                        
+                        <div class="mt-5 pt-4 border-t border-emerald-200">
+                            <h4 class="text-sm font-bold text-emerald-900 mb-1">O que é o Índice Global de Circularidade?</h4>
+                            <p class="text-xs text-emerald-800 mb-3">É a pontuação principal que mede o quanto a sua empresa e o seu produto avaliado já incorporam os princípios da Economia Circular na prática. Ele reflete a sua eficiência no uso de matérias-primas renováveis, no prolongamento da vida útil dos produtos e na gestão correta dos resíduos (como reuso ou reciclagem) em todo o ciclo de produção.</p>
+                            
+                            <h4 class="text-sm font-bold text-emerald-900 mb-1">O que é o Perfil de Circularidade de Materiais?</h4>
+                            <p class="text-xs text-emerald-800">É a síntese da circularidade dos materiais do produto avaliado, combinando a origem da matéria-prima, a gestão de resíduos e os desfechos de fim de vida mais relevantes. O cálculo usa as respostas das questões Q1, Q2, Q3, Q4, Q5, Q6 e Q9 para transformar o questionário em um indicador único, de leitura mais direta para o usuário.</p>
                         </div>
                     </div>
                 </div>
@@ -529,8 +595,9 @@
     }
 
     // ===== E-mail do Relatório =====
-    function construirHtmlEmailRelatorio({ empresa, percentual, maturidade, estagio, grupos, recs, dataStr, idRelatorio, pontos, totalPossivel, potencial }) {
+    function construirHtmlEmailRelatorio({ empresa, percentual, perfilCircularidadeMateriais, estagio, grupos, recs, dataStr, idRelatorio, pontos, totalPossivel, potencial }) {
         const setores = grupos || {};
+        const pcm = perfilCircularidadeMateriais || { indice: 0, componentes: {} };
         const lista = (arr) => Array.isArray(arr) ? arr.map(i => `<li>${i}</li>`).join('') : '';
 
         // Determinar cor baseada no percentual
@@ -783,8 +850,8 @@
                     <div class="stat-value">${percentual}%</div>
                   </div>
                   <div class="stat-item">
-                    <div class="stat-label">Maturidade</div>
-                    <div class="stat-value">${maturidade}%</div>
+                    <div class="stat-label">Perfil de Circularidade de Materiais</div>
+                    <div class="stat-value">${pcm.indice}%</div>
                   </div>
                   <div class="stat-item">
                     <div class="stat-label">Classificação</div>
@@ -797,6 +864,13 @@
                       <strong>${nome}</strong>: ${perc}%
                     </div>
                   `).join('')}
+                </div>
+                
+                <div style="margin-top:24px; padding-top:20px; border-top:2px solid #e5e7eb;">
+                  <h3 style="font-size:16px; font-weight:600; color:#111827; margin:0 0 8px 0;">O que é o Índice Global de Circularidade?</h3>
+                  <p style="font-size:14px; color:#374151; margin:0 0 16px 0; line-height:1.5;">É a pontuação principal que mede o quanto a sua empresa e o seu produto avaliado já incorporam os princípios da Economia Circular na prática. Ele reflete a sua eficiência no uso de matérias-primas renováveis, no prolongamento da vida útil dos produtos e na gestão correta dos resíduos (como reuso ou reciclagem) em todo o ciclo de produção.</p>
+                  <h3 style="font-size:16px; font-weight:600; color:#111827; margin:0 0 8px 0;">O que é o Perfil de Circularidade de Materiais?</h3>
+                  <p style="font-size:14px; color:#374151; margin:0; line-height:1.5;">É a síntese da circularidade dos materiais do produto avaliado, combinando a origem da matéria-prima, a gestão de resíduos e os desfechos de fim de vida mais relevantes. O cálculo usa as respostas das questões Q1, Q2, Q3, Q4, Q5, Q6 e Q9 para transformar o questionário em um indicador único, de leitura mais direta para o usuário.</p>
                 </div>
               </div>
 
@@ -879,4 +953,3 @@
     console.log('🔗 Backend API:', CONFIG.API_URL || 'http://localhost:3000');
 
 })();
-

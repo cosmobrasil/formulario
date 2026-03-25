@@ -17,7 +17,7 @@
     kpiTotal: document.getElementById('kpiTotal'),
     kpiPontos: document.getElementById('kpiPontos'),
     kpiIGC: document.getElementById('kpiIGC'),
-    kpiIME: document.getElementById('kpiIME'),
+    kpiPCM: document.getElementById('kpiPCM'),
     recomendacoes: document.getElementById('recomendacoes')
   };
 
@@ -227,8 +227,8 @@
       }
     });
 
-    destroyChart('ime');
-    charts.ime = new Chart(document.getElementById('chartIME'), {
+    destroyChart('pcm');
+    charts.pcm = new Chart(document.getElementById('chartPCM'), {
       type: 'radar',
       data: {
         labels: [
@@ -400,7 +400,7 @@
       el.kpiTotal.textContent = Number(data.totalFormularios || 0).toLocaleString('pt-BR');
       el.kpiPontos.textContent = Number(data.mediaTotalPontos || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
       el.kpiIGC.textContent = `${Number(data.mediaIGC || 0).toFixed(1)}%`;
-      el.kpiIME.textContent = `${Number(data.mediaIME || 0).toFixed(1)}%`;
+      el.kpiPCM.textContent = `${Number(data.mediaPCM ?? data.mediaIME ?? 0).toFixed(1)}%`;
 
       renderCharts(data);
       recomendacoesPorTopico(data.topicos || {});

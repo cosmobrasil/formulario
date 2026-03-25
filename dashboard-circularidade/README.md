@@ -4,11 +4,11 @@ Dashboard dark-mode para consolidar os formulários do Questionário de Circular
 
 ## Funcionalidades
 - Filtros por setor, produto, cidade, UF e período.
-- KPIs: total de formulários, média de pontos, média IGC, média IME.
+- KPIs: total de formulários, média de pontos, média IGC, média PCM.
 - Gráficos:
   - barras por tópicos;
   - rosca IGC (alcançado vs gap);
-  - radar IME;
+  - radar PCM;
   - radar Índice de Circularidade do Produto.
 - Painel de recomendações estratégicas por tópicos de menor desempenho.
 

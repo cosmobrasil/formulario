@@ -34,11 +34,11 @@ Construir um dashboard consolidado, em tempo quase real, com visão de circulari
 ## Itens já previstos e aderência
 Sua proposta está muito boa e cobre os principais blocos:
 - Filtros: setor, produto, cidade, UF.
-- KPIs: total formulários, média de pontos, média IGC, média IME.
+- KPIs: total formulários, média de pontos, média IGC, média PCM.
 - Gráficos:
   - barras por tópicos
   - rosca IGC (atingido vs gap)
-  - aranha IME
+  - aranha PCM
   - aranha Índice de Circularidade por 5 tópicos
 - Painel de recomendações estratégicas por tópico.
 
@@ -48,14 +48,14 @@ Sua proposta está muito boa e cobre os principais blocos:
 - Sem isso, médias podem ficar distorcidas por dados antigos.
 
 2. **Comparativos temporais**
-- Exibir variação vs período anterior para IGC, IME e total de formulários.
+- Exibir variação vs período anterior para IGC, PCM e total de formulários.
 
 3. **Qualidade da amostra**
 - Exibir `n` por recorte (ex.: cidade/produto com poucos formulários).
 - Alertar quando a amostra for pequena.
 
 4. **Distribuição além da média**
-- Mediana e quartis de IGC/IME para evitar leitura enviesada por outliers.
+- Mediana e quartis de IGC/PCM para evitar leitura enviesada por outliers.
 
 5. **Top/Bottom insights**
 - Top 5 cidades/setores com maior IGC.
@@ -70,7 +70,7 @@ Sua proposta está muito boa e cobre os principais blocos:
   - `GET /api/dashboard/filters`
   - `GET /api/dashboard/kpis`
   - `GET /api/dashboard/topicos`
-  - `GET /api/dashboard/igc-ime`
+  - `GET /api/dashboard/igc-pcm`
   - `GET /api/dashboard/recomendacoes`
 - Todos aceitando query params: `setor`, `produto`, `cidade`, `uf`, `data_inicio`, `data_fim`.
 
@@ -88,7 +88,7 @@ Sua proposta está muito boa e cobre os principais blocos:
 
 ## Entrega em fases
 1. Fase 1: filtros + KPIs + barras por tópico + rosca IGC.
-2. Fase 2: aranhas IME e Circularidade do Produto + recomendações estratégicas.
+2. Fase 2: aranhas PCM e Circularidade do Produto + recomendações estratégicas.
 3. Fase 3: comparativos temporais, exportações e otimizações de performance.
 
 ## Pasta do novo projeto
