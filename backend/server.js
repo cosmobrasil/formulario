@@ -1000,13 +1000,13 @@ app.post('/api/questionario', async (req, res) => {
             respostas.documentacao,
             pontuacao.pontos,
             pontuacao.percentual,
-            Number(pontuacao.perfilCircularidadeMateriais ?? pontuacao.maturidade ?? 0)
+            Number(pontuacao.pcm ?? pontuacao.perfilCircularidadeMateriais ?? pontuacao.maturidade ?? 0)
         ];
 
         const questionarioColumns = [
             'empresa_id', 'materia_prima', 'residuos', 'desmonte', 'descarte', 'recuperacao', 'reciclagem',
             'durabilidade', 'reparavel', 'reaproveitavel', 'ciclo_estendido', 'ciclo_rastreado', 'documentacao',
-            'soma', 'indice_global_circularidade', 'indice_maturidade_estruturante'
+            'soma', 'indice_global_circularidade', 'indice_pcm'
         ];
 
         if (hasRelatorioHtmlColumn) {
@@ -1078,7 +1078,7 @@ app.get('/api/questionarios', async (req, res) => {
         const result = await pool.query(`
             SELECT
                 e.nome_empresa, e.cidade, e.produto_avaliado,
-                q.indice_global_circularidade, q.indice_maturidade_estruturante,
+                q.indice_global_circularidade, q.indice_pcm,
                 q.created_at
             FROM questionarios q
             INNER JOIN empresas e ON q.empresa_id = e.id
@@ -1311,7 +1311,8 @@ app.get('/api/admin/respostas', async (req, res) => {
                 q.id AS questionario_id,
                 q.created_at,
                 q.indice_global_circularidade,
-                q.indice_maturidade_estruturante,
+                q.indice_pcm,
+                ${htmlSelect},
                 e.nome_responsavel,
                 e.nome_empresa,
                 e.cidade,
@@ -1335,21 +1336,8 @@ app.get('/api/admin/respostas', async (req, res) => {
                 produto: formatarProdutoExibicao(row.produto_avaliado),
                 dataHora: formatarDataHora(row.created_at),
                 igc: Number(row.indice_global_circularidade || 0),
-                pcm: calcularPerfilCircularidadeMateriais({
-                    1: row.materia_prima,
-                    2: row.residuos,
-                    3: row.desmonte,
-                    4: row.descarte,
-                    5: row.recuperacao,
-                    6: row.reciclagem,
-                    7: row.durabilidade,
-                    8: row.reparavel,
-                    9: row.reaproveitavel,
-                    10: row.ciclo_estendido,
-                    11: row.ciclo_rastreado,
-                    12: row.documentacao
-                }).indice,
-                ime: Number(row.indice_maturidade_estruturante || 0)
+                pcm: Number(row.indice_pcm || 0),
+                temHtml: Boolean(row.tem_relatorio_html)
             }))
         });
     } catch (error) {
@@ -1372,7 +1360,7 @@ app.get('/api/admin/respostas/:id/pdf', async (req, res) => {
                 q.created_at,
                 q.soma,
                 q.indice_global_circularidade,
-                q.indice_maturidade_estruturante,
+                q.indice_pcm,
                 q.materia_prima, q.residuos, q.desmonte, q.descarte, q.recuperacao, q.reciclagem,
                 q.durabilidade, q.reparavel, q.reaproveitavel, q.ciclo_estendido, q.ciclo_rastreado, q.documentacao,
                 e.nome_responsavel, e.nome_empresa, e.cidade, e.uf, e.setor_economico, e.produto_avaliado
