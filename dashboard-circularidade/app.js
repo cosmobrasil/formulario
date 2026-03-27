@@ -161,18 +161,14 @@
     registerChartPlugins();
 
     const topicos = data.topicos || {};
-    const cosmobRaw = data.cosmobIndicadores || {};
-    if (!data.cosmobIndicadores) {
-      console.warn('Dashboard sem cosmobIndicadores no payload /api/dashboard/overview.');
-    }
-    const cosmob = {
-      fonteRenovavel: numeroSeguro(cosmobRaw.fonteRenovavel),
-      virgem: numeroSeguro(cosmobRaw.virgem),
-      reciclado: numeroSeguro(cosmobRaw.reciclado),
-      recicladoPermanentemente: numeroSeguro(cosmobRaw.recicladoPermanentemente),
-      aterro: numeroSeguro(cosmobRaw.aterro),
-      reciclagem: numeroSeguro(cosmobRaw.reciclagem),
-      valorizacaoEnergetica: numeroSeguro(cosmobRaw.valorizacaoEnergetica)
+    const pcmDimensoesRaw = data.pcmDimensoes || {};
+    const pcmDimensoes = {
+      durabilidade: numeroSeguro(pcmDimensoesRaw.durabilidade),
+      designReparavel: numeroSeguro(pcmDimensoesRaw.designReparavel),
+      designReaproveitamento: numeroSeguro(pcmDimensoesRaw.designReaproveitamento),
+      servicosCiclo: numeroSeguro(pcmDimensoesRaw.servicosCiclo),
+      rastreabilidade: numeroSeguro(pcmDimensoesRaw.rastreabilidade),
+      transparencia: numeroSeguro(pcmDimensoesRaw.transparencia)
     };
 
     destroyChart('topicos');
@@ -232,24 +228,22 @@
       type: 'radar',
       data: {
         labels: [
-          'De fonte renovável',
-          'Virgem',
-          'Reciclado',
-          'Reciclado permanentemente',
-          'Aterro',
-          'Reciclagem',
-          'Valorização energética'
+          'Durabilidade',
+          'Design reparável',
+          'Design de reaproveitamento',
+          'Serviços no ciclo',
+          'Rastreabilidade',
+          'Transparência'
         ],
         datasets: [{
-          label: 'Indicadores estimados (%)',
+          label: 'Dimensões do PCM (%)',
           data: [
-            cosmob.fonteRenovavel,
-            cosmob.virgem,
-            cosmob.reciclado,
-            cosmob.recicladoPermanentemente,
-            cosmob.aterro,
-            cosmob.reciclagem,
-            cosmob.valorizacaoEnergetica
+            pcmDimensoes.durabilidade,
+            pcmDimensoes.designReparavel,
+            pcmDimensoes.designReaproveitamento,
+            pcmDimensoes.servicosCiclo,
+            pcmDimensoes.rastreabilidade,
+            pcmDimensoes.transparencia
           ],
           backgroundColor: 'rgba(16, 185, 129, 0.22)',
           borderColor: '#10b981',
