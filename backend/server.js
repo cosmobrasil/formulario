@@ -1322,6 +1322,9 @@ app.get('/api/admin/respostas', async (req, res) => {
     if (!verificarAcessoAdmin(req, res)) return;
 
     try {
+        const htmlSelect = hasRelatorioHtmlColumn
+            ? 'q.relatorio_html IS NOT NULL AS tem_relatorio_html'
+            : 'FALSE AS tem_relatorio_html';
         const result = await pool.query(`
             SELECT
                 q.id AS questionario_id,
