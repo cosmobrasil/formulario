@@ -406,14 +406,14 @@
 
   function configurarEventos() {
     el.btnAtualizar.addEventListener('click', async () => {
-      await carregarFiltros();
       await atualizarDashboard();
+      await carregarFiltros();
     });
 
     [el.setor, el.produto, el.cidade, el.uf, el.dataInicio, el.dataFim].forEach((input) => {
       input.addEventListener('change', async () => {
-        await carregarFiltros();
         await atualizarDashboard();
+        await carregarFiltros();
       });
     });
 
@@ -424,8 +424,8 @@
       }
       if (el.autoRefresh.checked) {
         refreshTimer = setInterval(async () => {
-          await carregarFiltros();
           await atualizarDashboard();
+          await carregarFiltros();
         }, 60000);
       }
     });
@@ -433,8 +433,8 @@
 
   async function init() {
     configurarEventos();
-    await carregarFiltros();
     await atualizarDashboard();
+    await carregarFiltros();
   }
 
   init();
