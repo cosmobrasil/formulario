@@ -40,10 +40,15 @@ const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
     .filter(Boolean);
 
 const originAllowlist = new Set(allowedOrigins.length > 0 ? allowedOrigins : defaultAllowedOrigins);
+function origemPermitidaCors(origin) {
+    if (!origin) return true;
+    if (originAllowlist.has(origin)) return true;
+    return /^https:\/\/[^/]+\.netlify\.app\b/i.test(origin);
+}
 
 app.use(cors({
     origin(origin, callback) {
-        if (!origin || originAllowlist.has(origin)) {
+        if (origemPermitidaCors(origin)) {
             return callback(null, true);
         }
         return callback(new Error('Origem não permitida por CORS.'));
