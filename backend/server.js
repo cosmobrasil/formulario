@@ -454,9 +454,28 @@ app.post('/api/questionario', async (req, res) => {
 
         const { empresa, respostas, pontuacao, relatorioHtml } = req.body;
 
+        // Limpar e definir fallbacks robustos para os campos da empresa
+        const nomeEmpresa = (empresa.nomeEmpresa || '').toString().trim() || 'não identificado';
+        const nomeResponsavel = (empresa.nomeResponsavel || '').toString().trim() || 'não identificado';
+        const email = (empresa.email || '').toString().trim() || 'sem-email@cosmobrasil.app';
+        const cidade = (empresa.cidade || '').toString().trim() || 'NÃO INFORMADO';
+        const setorEconomico = (empresa.setorEconomico || '').toString().trim() || 'Outro';
+        const produtoAvaliado = (empresa.produtoAvaliado || '').toString().trim() || 'Não Informado';
+        const uf = (empresa.uf || '').toString().trim() || null;
+
         // Limpar CNPJ e celular
-        const cnpjLimpo = limparCNPJ(empresa.cnpj);
-        const celularLimpo = limparCelular(empresa.celular);
+        let cnpjLimpo = limparCNPJ(empresa.cnpj);
+        if (cnpjLimpo.length !== 14) {
+            // Gerar CNPJ fictício único de 14 dígitos (9 + 12 últimos dígitos do timestamp em milissegundos + 1 dígito aleatório)
+            const tsStr = Date.now().toString();
+            const randomDigit = Math.floor(Math.random() * 10).toString();
+            cnpjLimpo = '9' + tsStr.slice(-12) + randomDigit;
+        }
+
+        let celularLimpo = limparCelular(empresa.celular);
+        if (celularLimpo.length < 10 || celularLimpo.length > 11) {
+            celularLimpo = '00000000000'; // Fallback para 11 dígitos para chk_celular
+        }
 
         console.log('📝 Dados do questionário recebidos.');
 
@@ -483,14 +502,14 @@ app.post('/api/questionario', async (req, res) => {
                          uf = $8
                      WHERE id = $9`,
                     [
-                        normalizarTexto(empresa.nomeEmpresa),
-                        normalizarTexto(empresa.nomeResponsavel),
-                        normalizarTexto(empresa.email).toLowerCase(),
-                        normalizarCidade(empresa.cidade),
+                        normalizarTexto(nomeEmpresa),
+                        normalizarTexto(nomeResponsavel),
+                        normalizarTexto(email).toLowerCase(),
+                        normalizarCidade(cidade),
                         celularLimpo,
-                        normalizarSetor(empresa.setorEconomico),
-                        normalizarProduto(empresa.produtoAvaliado),
-                        normalizarUF(empresa.uf),
+                        normalizarSetor(setorEconomico),
+                        normalizarProduto(produtoAvaliado),
+                        normalizarUF(uf),
                         empresaId
                     ]
                 );
@@ -506,13 +525,13 @@ app.post('/api/questionario', async (req, res) => {
                          produto_avaliado = $7
                      WHERE id = $8`,
                     [
-                        normalizarTexto(empresa.nomeEmpresa),
-                        normalizarTexto(empresa.nomeResponsavel),
-                        normalizarTexto(empresa.email).toLowerCase(),
-                        normalizarCidade(empresa.cidade),
+                        normalizarTexto(nomeEmpresa),
+                        normalizarTexto(nomeResponsavel),
+                        normalizarTexto(email).toLowerCase(),
+                        normalizarCidade(cidade),
                         celularLimpo,
-                        normalizarSetor(empresa.setorEconomico),
-                        normalizarProduto(empresa.produtoAvaliado),
+                        normalizarSetor(setorEconomico),
+                        normalizarProduto(produtoAvaliado),
                         empresaId
                     ]
                 );
@@ -521,14 +540,14 @@ app.post('/api/questionario', async (req, res) => {
         } else {
             // Nova empresa - inserir com dados limpos
             const empresaValues = [
-                normalizarTexto(empresa.nomeEmpresa),
+                normalizarTexto(nomeEmpresa),
                 cnpjLimpo,
-                normalizarTexto(empresa.nomeResponsavel),
-                normalizarTexto(empresa.email).toLowerCase(),
-                normalizarCidade(empresa.cidade),
+                normalizarTexto(nomeResponsavel),
+                normalizarTexto(email).toLowerCase(),
+                normalizarCidade(cidade),
                 celularLimpo,
-                normalizarSetor(empresa.setorEconomico),
-                normalizarProduto(empresa.produtoAvaliado)
+                normalizarSetor(setorEconomico),
+                normalizarProduto(produtoAvaliado)
             ];
 
             let insertEmpresaSql = `INSERT INTO empresas (nome_empresa, cnpj, nome_responsavel, email, cidade, celular, setor_economico, produto_avaliado)
@@ -536,7 +555,7 @@ app.post('/api/questionario', async (req, res) => {
                  RETURNING id`;
 
             if (hasUfColumn) {
-                empresaValues.push(normalizarUF(empresa.uf));
+                empresaValues.push(normalizarUF(uf));
                 insertEmpresaSql = `INSERT INTO empresas (nome_empresa, cnpj, nome_responsavel, email, cidade, celular, setor_economico, produto_avaliado, uf)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                  RETURNING id`;
@@ -600,11 +619,11 @@ app.post('/api/questionario', async (req, res) => {
         if (driveService.isAuthenticated() && relatorioHtml) {
             try {
                 console.log('💾 Salvando relatório no Google Drive...');
-                const fileName = `Relatorio_${empresa.nomeEmpresa.replace(/\s+/g, '_')}_${Date.now()}.doc`;
+                const fileName = `Relatorio_${nomeEmpresa.replace(/\s+/g, '_')}_${Date.now()}.doc`;
                 const driveResult = await driveService.saveFile(
                     relatorioHtml,
                     fileName,
-                    `Relatório de Circularidade - ${empresa.nomeEmpresa} - Índice: ${pontuacao.percentual}%`
+                    `Relatório de Circularidade - ${nomeEmpresa} - Índice: ${pontuacao.percentual}%`
                 );
                 responseData.driveSaved = true;
                 responseData.driveUrl = driveResult.viewUrl;
@@ -1044,13 +1063,27 @@ app.get('/api/drive/auth-url', (req, res) => {
         });
     }
 
-    const authUrl = driveService.getAuthUrl();
-    console.log('🔗 URL Gerada:', authUrl); // Verifique nos logs do Railway se o client_id está correto aqui
+    try {
+        const authUrl = driveService.getAuthUrl();
+        if (!authUrl) {
+            return res.status(500).json({
+                success: false,
+                error: 'Google Drive não configurado no servidor.'
+            });
+        }
 
-    res.json({
-        authUrl: authUrl,
-        message: 'Abra esta URL no navegador para autorizar'
-    });
+        console.log('🔗 URL Gerada:', authUrl); // Verifique nos logs do Railway se o client_id está correto aqui
+
+        return res.json({
+            authUrl,
+            message: 'Abra esta URL no navegador para autorizar'
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
 });
 
 // Endpoint de Diagnóstico (Temporário)
