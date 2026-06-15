@@ -2,10 +2,11 @@
 // Backend API: PostgreSQL Railway
 window.QUESTIONARIO_CONFIG = {
     // URL do backend - ajuste conforme seu ambiente de produção
-    // Para produção no Netlify, o redirecionamento é feito pelo netlify.toml
+    // Para produção no Netlify, use a mesma origem e deixe o redirect do netlify.toml
+    // encaminhar /api/* para o backend Railway.
     API_URL: (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
         ? 'http://localhost:3000'
-        : 'https://formulario-production-8df7.up.railway.app',
+        : '',
 
     // URL alternativa para produção direta (se necessário)
     // API_URL: 'https://cosmobrasil-questionario-backend.railway.app'
@@ -234,4 +235,3 @@ window.QUESTIONARIO_CONFIG = {
         }
     }
 };
-

@@ -80,14 +80,14 @@
         e.preventDefault();
         
         dados.empresa = {
-            nomeEmpresa: document.getElementById('nomeEmpresa').value,
-            cnpj: document.getElementById('cnpj').value,
-            nomeResponsavel: document.getElementById('nomeResponsavel').value,
-            cidade: document.getElementById('cidade').value,
-            celular: document.getElementById('celular').value,
-            email: document.getElementById('email').value,
-            setorEconomico: document.getElementById('setorEconomico').value,
-            produtoAvaliado: document.getElementById('produtoAvaliado').value
+            nomeEmpresa: document.getElementById('nomeEmpresa').value || 'não identificado',
+            cnpj: document.getElementById('cnpj').value || '',
+            nomeResponsavel: document.getElementById('nomeResponsavel').value || 'não identificado',
+            cidade: document.getElementById('cidade').value || 'NÃO INFORMADO',
+            celular: document.getElementById('celular').value || '',
+            email: document.getElementById('email').value || 'sem-email@cosmobrasil.app',
+            setorEconomico: document.getElementById('setorEconomico').value || 'Outro',
+            produtoAvaliado: document.getElementById('produtoAvaliado').value || 'Não Informado'
         };
         
         iniciarQuestionario();

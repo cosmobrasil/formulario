@@ -93,23 +93,18 @@
         e.preventDefault();
 
         const cnpjNormalizado = normalizarCNPJ(document.getElementById('cnpj').value);
-        if (cnpjNormalizado.length !== 14) {
-            mostrarFeedbackCNPJ('Informe um CNPJ válido com 14 dígitos.', 'text-red-600');
-            return;
-        }
-
         document.getElementById('cnpj').value = cnpjNormalizado;
 
         dados.empresa = {
-            nomeEmpresa: document.getElementById('nomeEmpresa').value,
+            nomeEmpresa: document.getElementById('nomeEmpresa').value || 'não identificado',
             cnpj: cnpjNormalizado,
-            nomeResponsavel: document.getElementById('nomeResponsavel').value,
-            cidade: document.getElementById('cidade').value,
+            nomeResponsavel: document.getElementById('nomeResponsavel').value || 'não identificado',
+            cidade: document.getElementById('cidade').value || 'NÃO INFORMADO',
             uf: dados.empresaUf || '',
-            celular: document.getElementById('celular').value,
-            email: document.getElementById('email').value,
-            setorEconomico: document.getElementById('setorEconomico').value,
-            produtoAvaliado: document.getElementById('produtoAvaliado').value
+            celular: document.getElementById('celular').value || '',
+            email: document.getElementById('email').value || 'sem-email@cosmobrasil.app',
+            setorEconomico: document.getElementById('setorEconomico').value || 'Outro',
+            produtoAvaliado: document.getElementById('produtoAvaliado').value || 'Não Informado'
         };
 
         iniciarQuestionario();
