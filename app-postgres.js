@@ -271,6 +271,7 @@
 
         let setor = '';
         if (div >= 1 && div <= 3) setor = 'Agropecuária';
+        else if (div === 16 || div === 31) setor = 'Madeira e Móveis';
         else if (div >= 5 && div <= 33) setor = 'Indústria';
         else if (div >= 41 && div <= 43) setor = 'Construção Civil';
         else if (div >= 45 && div <= 47) setor = 'Comércio';
