@@ -111,9 +111,8 @@
 
   <script>
     (function () {
-      const isLocal = location.hostname.includes('localhost') || location.hostname === '127.0.0.1';
-      const isNetlify = location.hostname.endsWith('netlify.app');
-      const API_BASE = isLocal ? 'http://localhost:3000' : (isNetlify ? '' : 'https://formulario-production-8df7.up.railway.app');
+      const isLocal = location.hostname.includes('localhost') || location.hostname === '127.0.0.1' || location.protocol === 'file:';
+      const API_BASE = isLocal ? 'http://localhost:3000' : 'https://formulario-production-8df7.up.railway.app';
 
       const loadBtn = document.getElementById('loadBtn');
       const tokenInput = document.getElementById('tokenInput');

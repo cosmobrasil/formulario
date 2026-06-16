@@ -9,6 +9,8 @@
     const REPORT_EMAIL = PG_CONFIG.REPORT_EMAIL || 'ti@cosmobrasil.app';
 
     const CONFIG = window.QUESTIONARIO_CONFIG || {};
+    const LOCAL_API_URL = 'http://localhost:3000';
+    const PRODUCTION_API_URL = 'https://formulario-production-8df7.up.railway.app';
 
     // Fallbacks defensivos caso config.js não carregue em produção
     const MAP_DEFAULT = {
@@ -69,6 +71,94 @@
         respostas: {},
         questaoAtual: 0
     };
+
+    function normalizarApiBase(url) {
+        if (url == null) return null;
+        const base = String(url).trim();
+        if (!base) return '';
+        return base.endsWith('/') ? base.slice(0, -1) : base;
+    }
+
+    function obterBasesApi() {
+        const bases = [];
+        const configBases = Array.isArray(CONFIG.API_URLS) ? CONFIG.API_URLS : [];
+        const configBase = normalizarApiBase(CONFIG.API_URL);
+
+        if (configBases.length > 0) {
+            configBases.forEach((base) => {
+                const normalizada = normalizarApiBase(base);
+                if (normalizada !== null) bases.push(normalizada);
+            });
+        } else if (configBase !== null) {
+            bases.push(configBase);
+        }
+
+        const isLocalHost =
+            window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1' ||
+            window.location.protocol === 'file:';
+
+        if (!isLocalHost && window.location.hostname.endsWith('netlify.app')) {
+            bases.push(window.location.origin);
+        }
+
+        if (bases.length === 0) {
+            bases.push(isLocalHost ? LOCAL_API_URL : PRODUCTION_API_URL);
+        }
+
+        return [...new Set(bases)];
+    }
+
+    async function fetchJsonComFallback(caminho, options = {}) {
+        const bases = obterBasesApi();
+        let ultimoResultado = null;
+
+        for (const base of bases) {
+            const url = `${base || ''}${caminho}`;
+
+            try {
+                const response = await fetch(url, options);
+                const bodyText = await response.text();
+
+                let data = null;
+                if (bodyText) {
+                    try {
+                        data = JSON.parse(bodyText);
+                    } catch {
+                        data = null;
+                    }
+                }
+
+                if (response.ok) {
+                    return { response, data, bodyText, url };
+                }
+
+                if (data && typeof data === 'object' && Object.prototype.hasOwnProperty.call(data, 'success')) {
+                    return { response, data, bodyText, url };
+                }
+
+                ultimoResultado = { response, data, bodyText, url };
+            } catch (error) {
+                ultimoResultado = { error, url };
+            }
+        }
+
+        if (ultimoResultado) return ultimoResultado;
+        throw new Error('Falha ao consultar a API.');
+    }
+
+    function mensagemErroApiCNPJ(response, result, bodyText) {
+        if (result && result.error) return result.error;
+        if (!response) {
+            return 'Não foi possível conectar ao backend de CNPJ.';
+        }
+        const texto = typeof bodyText === 'string' ? bodyText.trim() : '';
+        if (texto && !texto.startsWith('<')) return texto;
+        if (response.status === 404) {
+            return 'A rota de consulta de CNPJ não foi encontrada neste ambiente. Verifique a URL do backend.';
+        }
+        return `Falha ao consultar CNPJ (${response.status}).`;
+    }
 
     // Event Listeners
     elementos.aceitarTermos.addEventListener('change', function () {
@@ -136,21 +226,11 @@
                 btnConsultar.innerHTML = '<span class="animate-pulse">Consultando...</span>';
                 mostrarFeedbackCNPJ('Buscando dados na Receita...', 'text-orange-600');
 
-                const response = await fetch(`${CONFIG.API_URL || ''}/api/cnpj/${cnpj}`);
-                let result = null;
+                const apiResult = await fetchJsonComFallback(`/api/cnpj/${cnpj}`);
+                const response = apiResult.response;
+                const result = apiResult.data;
 
-                try {
-                    result = await response.json();
-                } catch (parseError) {
-                    result = {
-                        success: false,
-                        error: response.ok
-                            ? 'Resposta inválida do servidor.'
-                            : `Falha no servidor (${response.status}). Tente novamente.`
-                    };
-                }
-
-                if (response.ok && result.success && result.data) {
+                if (response && response.ok && result && result.success && result.data) {
                     const d = result.data;
                     document.getElementById('nomeEmpresa').value = d.fantasia || d.razao || '';
                     document.getElementById('cidade').value = d.cidade || '';
@@ -163,14 +243,12 @@
 
                     mostrarFeedbackCNPJ('✅ Dados carregados com sucesso!', 'text-emerald-600');
                 } else {
-                    const erroApi = (result && result.error)
-                        ? result.error
-                        : `Falha ao consultar CNPJ (${response.status}).`;
+                    const erroApi = mensagemErroApiCNPJ(response, result, apiResult.bodyText);
                     mostrarFeedbackCNPJ('❌ ' + erroApi, 'text-red-600');
                 }
             } catch (error) {
                 console.error('Erro na consulta de CNPJ:', error);
-                mostrarFeedbackCNPJ('⚠️ Erro na conexão com o servidor.', 'text-red-600');
+                mostrarFeedbackCNPJ('⚠️ Erro na conexão com a API de CNPJ.', 'text-red-600');
             } finally {
                 btnConsultar.disabled = false;
                 btnConsultar.innerText = 'Consultar';
@@ -302,7 +380,7 @@
             console.log('🔄 Enviando dados para o Backend API...');
 
             // Validar configuração
-            const apiUrl = CONFIG.API_URL || '';
+            const apiUrl = CONFIG.API_URL || PRODUCTION_API_URL;
 
             // Calcular índices
             const { pontos, totalPossivel, percentual, maturidade, grupos } = calcularPontuacao();

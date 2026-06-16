@@ -1,9 +1,8 @@
 (function () {
-  const isLocal = window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1';
-  const isNetlify = window.location.hostname.endsWith('netlify.app');
+  const isLocal = window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
   const API_BASE = isLocal
     ? 'http://localhost:3000'
-    : (isNetlify ? '' : 'https://formulario-production-8df7.up.railway.app');
+    : 'https://formulario-production-8df7.up.railway.app';
 
   const el = {
     setor: document.getElementById('filtroSetor'),

@@ -216,7 +216,7 @@
             });
 
             // Enviar para o backend
-            const apiUrl = CONFIG.API_URL || '';
+            const apiUrl = CONFIG.API_URL || 'https://formulario-production-8df7.up.railway.app';
             const response = await fetch(`${apiUrl}/api/questionario`, {
                 method: 'POST',
                 headers: {
