@@ -147,19 +147,6 @@
         throw new Error('Falha ao consultar a API.');
     }
 
-    function mensagemErroApiCNPJ(response, result, bodyText) {
-        if (result && result.error) return result.error;
-        if (!response) {
-            return 'Não foi possível conectar ao backend de CNPJ.';
-        }
-        const texto = typeof bodyText === 'string' ? bodyText.trim() : '';
-        if (texto && !texto.startsWith('<')) return texto;
-        if (response.status === 404) {
-            return 'A rota de consulta de CNPJ não foi encontrada neste ambiente. Verifique a URL do backend.';
-        }
-        return `Falha ao consultar CNPJ (${response.status}).`;
-    }
-
     // Event Listeners
     elementos.aceitarTermos.addEventListener('change', function () {
         elementos.btnContinuar.disabled = !this.checked;
@@ -217,7 +204,7 @@
             inputCNPJ.value = cnpj;
 
             if (cnpj.length !== 14) {
-                mostrarFeedbackCNPJ('Informe um CNPJ válido com 14 dígitos.', 'text-red-600');
+                mostrarFeedbackCNPJ('Conferir o número do CNPJ - faça o preenchimento das informações abaixo', 'text-red-600');
                 return;
             }
 
@@ -243,12 +230,17 @@
 
                     mostrarFeedbackCNPJ('✅ Dados carregados com sucesso!', 'text-emerald-600');
                 } else {
-                    const erroApi = mensagemErroApiCNPJ(response, result, apiResult.bodyText);
-                    mostrarFeedbackCNPJ('❌ ' + erroApi, 'text-red-600');
+                    console.warn('Falha na consulta de CNPJ:', {
+                        url: apiResult.url,
+                        status: response ? response.status : null,
+                        result,
+                        bodyText: apiResult.bodyText
+                    });
+                    mostrarFeedbackCNPJ('Conferir o número do CNPJ - faça o preenchimento das informações abaixo', 'text-red-600');
                 }
             } catch (error) {
                 console.error('Erro na consulta de CNPJ:', error);
-                mostrarFeedbackCNPJ('⚠️ Erro na conexão com a API de CNPJ.', 'text-red-600');
+                mostrarFeedbackCNPJ('Conferir o número do CNPJ - faça o preenchimento das informações abaixo', 'text-red-600');
             } finally {
                 btnConsultar.disabled = false;
                 btnConsultar.innerText = 'Consultar';
