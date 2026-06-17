@@ -54,7 +54,7 @@ CREATE TABLE questionarios (
     -- Campos calculados
     soma INTEGER,
     indice_global_circularidade DECIMAL(10,2),
-    indice_maturidade_estruturante DECIMAL(10,2),
+    indice_pcm DECIMAL(10,2),
     relatorio_html TEXT,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -120,7 +120,7 @@ SELECT
     q.documentacao AS DOCUMENTACAO,
     q.soma AS SOMA,
     q.indice_global_circularidade AS INDICE_GLOBAL_DE_CIRCULARIDADE,
-    q.indice_maturidade_estruturante AS INDICE_DE_MATURIDADE_ESTRUTURANTE,
+    q.indice_pcm AS INDICE_PCM,
     q.created_at,
     q.updated_at
 FROM questionarios q

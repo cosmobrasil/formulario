@@ -18,6 +18,7 @@ const ADMIN_PANEL_TOKEN = (process.env.ADMIN_PANEL_TOKEN || '').trim();
 let hasUfColumn = false;
 let hasUnaccentExtension = false;
 let hasRelatorioHtmlColumn = false;
+let questionarioIndicePcmColumn = 'indice_pcm';
 
 // Inicializar serviço do Google Drive
 const driveService = new GoogleDriveService();
@@ -56,7 +57,7 @@ app.use(cors({
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type']
 }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, '../')));
 
 // Configuração do PostgreSQL
@@ -102,15 +103,33 @@ async function carregarRecursosBanco() {
             ) AS has_relatorio_html,
             EXISTS (
                 SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'questionarios'
+                  AND column_name = 'indice_pcm'
+            ) AS has_indice_pcm,
+            EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'questionarios'
+                  AND column_name = 'indice_maturidade_estruturante'
+            ) AS has_legacy_indice_pcm,
+            EXISTS (
+                SELECT 1
                 FROM pg_extension
                 WHERE extname = 'unaccent'
             ) AS has_unaccent;
         `);
         hasUfColumn = !!result.rows[0]?.has_uf;
         hasRelatorioHtmlColumn = !!result.rows[0]?.has_relatorio_html;
+        const hasIndicePcmColumn = !!result.rows[0]?.has_indice_pcm;
+        const hasLegacyIndicePcmColumn = !!result.rows[0]?.has_legacy_indice_pcm;
         hasUnaccentExtension = !!result.rows[0]?.has_unaccent;
         console.log(`🧭 Coluna empresas.uf disponível: ${hasUfColumn ? 'SIM' : 'NÃO'}`);
         console.log(`🧭 Coluna questionarios.relatorio_html disponível: ${hasRelatorioHtmlColumn ? 'SIM' : 'NÃO'}`);
+        console.log(`🧭 Coluna questionarios.indice_pcm disponível: ${hasIndicePcmColumn ? 'SIM' : 'NÃO'}`);
+        console.log(`🧭 Coluna questionarios.indice_maturidade_estruturante disponível: ${hasLegacyIndicePcmColumn ? 'SIM' : 'NÃO'}`);
         console.log(`🧭 Extensão unaccent disponível: ${hasUnaccentExtension ? 'SIM' : 'NÃO'}`);
 
         if (!hasRelatorioHtmlColumn) {
@@ -122,10 +141,27 @@ async function carregarRecursosBanco() {
                 console.warn('⚠️ Não foi possível criar questionarios.relatorio_html automaticamente:', migrationError.message);
             }
         }
+
+        if (hasIndicePcmColumn) {
+            questionarioIndicePcmColumn = 'indice_pcm';
+        } else if (hasLegacyIndicePcmColumn) {
+            try {
+                await pool.query('ALTER TABLE questionarios RENAME COLUMN indice_maturidade_estruturante TO indice_pcm');
+                questionarioIndicePcmColumn = 'indice_pcm';
+                console.log('✅ Coluna questionarios.indice_maturidade_estruturante renomeada para indice_pcm automaticamente.');
+            } catch (migrationError) {
+                questionarioIndicePcmColumn = 'indice_maturidade_estruturante';
+                console.warn('⚠️ Não foi possível renomear questionarios.indice_maturidade_estruturante automaticamente:', migrationError.message);
+            }
+        } else {
+            questionarioIndicePcmColumn = 'indice_pcm';
+            console.warn('⚠️ Nenhuma coluna de PCM foi encontrada em questionarios.');
+        }
     } catch (error) {
         hasUfColumn = false;
         hasRelatorioHtmlColumn = false;
         hasUnaccentExtension = false;
+        questionarioIndicePcmColumn = 'indice_pcm';
         console.warn('⚠️ Não foi possível validar coluna UF no banco.');
     }
 }
@@ -906,9 +942,22 @@ app.post('/api/questionario', async (req, res) => {
 
         const { empresa, respostas, pontuacao, relatorioHtml } = req.body;
 
-        // Limpar CNPJ e celular
-        const cnpjLimpo = limparCNPJ(empresa.cnpj);
-        const celularLimpo = limparCelular(empresa.celular);
+        const empresaDados = empresa || {};
+        const respostasDados = respostas || {};
+        const pontuacaoDados = pontuacao || {};
+
+        // Limpar CNPJ e celular; se vierem vazios ou inválidos, gerar fallback compatível com o schema
+        let cnpjLimpo = limparCNPJ(empresaDados.cnpj);
+        if (cnpjLimpo.length !== 14) {
+            const tsStr = Date.now().toString();
+            const randomDigit = Math.floor(Math.random() * 10).toString();
+            cnpjLimpo = `9${tsStr.slice(-12)}${randomDigit}`;
+        }
+
+        let celularLimpo = limparCelular(empresaDados.celular);
+        if (celularLimpo.length < 10 || celularLimpo.length > 11) {
+            celularLimpo = '00000000000';
+        }
 
         console.log('📝 Dados do questionário recebidos.');
 
@@ -924,25 +973,25 @@ app.post('/api/questionario', async (req, res) => {
             empresaId = existingEmpresa.rows[0].id;
             if (hasUfColumn) {
                 await client.query(
-                    `UPDATE empresas
-                     SET nome_empresa = $1,
-                         nome_responsavel = $2,
-                         email = $3,
-                         cidade = $4,
+                        `UPDATE empresas
+                         SET nome_empresa = $1,
+                             nome_responsavel = $2,
+                             email = $3,
+                             cidade = $4,
                          celular = $5,
                          setor_economico = $6,
                          produto_avaliado = $7,
                          uf = $8
                      WHERE id = $9`,
                     [
-                        normalizarTexto(empresa.nomeEmpresa),
-                        normalizarTexto(empresa.nomeResponsavel),
-                        normalizarTexto(empresa.email).toLowerCase(),
-                        normalizarCidade(empresa.cidade),
+                        normalizarTexto(empresaDados.nomeEmpresa),
+                        normalizarTexto(empresaDados.nomeResponsavel),
+                        normalizarTexto(empresaDados.email).toLowerCase(),
+                        normalizarCidade(empresaDados.cidade),
                         celularLimpo,
-                        normalizarSetor(empresa.setorEconomico),
-                        normalizarProduto(empresa.produtoAvaliado),
-                        normalizarUF(empresa.uf),
+                        normalizarSetor(empresaDados.setorEconomico),
+                        normalizarProduto(empresaDados.produtoAvaliado),
+                        normalizarUF(empresaDados.uf),
                         empresaId
                     ]
                 );
@@ -958,13 +1007,13 @@ app.post('/api/questionario', async (req, res) => {
                          produto_avaliado = $7
                      WHERE id = $8`,
                     [
-                        normalizarTexto(empresa.nomeEmpresa),
-                        normalizarTexto(empresa.nomeResponsavel),
-                        normalizarTexto(empresa.email).toLowerCase(),
-                        normalizarCidade(empresa.cidade),
+                        normalizarTexto(empresaDados.nomeEmpresa),
+                        normalizarTexto(empresaDados.nomeResponsavel),
+                        normalizarTexto(empresaDados.email).toLowerCase(),
+                        normalizarCidade(empresaDados.cidade),
                         celularLimpo,
-                        normalizarSetor(empresa.setorEconomico),
-                        normalizarProduto(empresa.produtoAvaliado),
+                        normalizarSetor(empresaDados.setorEconomico),
+                        normalizarProduto(empresaDados.produtoAvaliado),
                         empresaId
                     ]
                 );
@@ -973,14 +1022,14 @@ app.post('/api/questionario', async (req, res) => {
         } else {
             // Nova empresa - inserir com dados limpos
             const empresaValues = [
-                normalizarTexto(empresa.nomeEmpresa),
+                normalizarTexto(empresaDados.nomeEmpresa),
                 cnpjLimpo,
-                normalizarTexto(empresa.nomeResponsavel),
-                normalizarTexto(empresa.email).toLowerCase(),
-                normalizarCidade(empresa.cidade),
+                normalizarTexto(empresaDados.nomeResponsavel),
+                normalizarTexto(empresaDados.email).toLowerCase(),
+                normalizarCidade(empresaDados.cidade),
                 celularLimpo,
-                normalizarSetor(empresa.setorEconomico),
-                normalizarProduto(empresa.produtoAvaliado)
+                normalizarSetor(empresaDados.setorEconomico),
+                normalizarProduto(empresaDados.produtoAvaliado)
             ];
 
             let insertEmpresaSql = `INSERT INTO empresas (nome_empresa, cnpj, nome_responsavel, email, cidade, celular, setor_economico, produto_avaliado)
@@ -988,7 +1037,7 @@ app.post('/api/questionario', async (req, res) => {
                  RETURNING id`;
 
             if (hasUfColumn) {
-                empresaValues.push(normalizarUF(empresa.uf));
+                empresaValues.push(normalizarUF(empresaDados.uf));
                 insertEmpresaSql = `INSERT INTO empresas (nome_empresa, cnpj, nome_responsavel, email, cidade, celular, setor_economico, produto_avaliado, uf)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                  RETURNING id`;
@@ -1002,27 +1051,27 @@ app.post('/api/questionario', async (req, res) => {
         // 2. Inserir questionário
         const questionarioParams = [
             empresaId,
-            respostas.materia_prima,
-            respostas.residuos,
-            respostas.desmonte,
-            respostas.descarte,
-            respostas.recuperacao,
-            respostas.reciclagem,
-            respostas.durabilidade,
-            respostas.reparavel,
-            respostas.reaproveitavel,
-            respostas.ciclo_estendido,
-            respostas.ciclo_rastreado,
-            respostas.documentacao,
-            pontuacao.pontos,
-            pontuacao.percentual,
-            Number(pontuacao.pcm ?? pontuacao.perfilCircularidadeMateriais ?? pontuacao.maturidade ?? 0)
+            respostasDados.materia_prima,
+            respostasDados.residuos,
+            respostasDados.desmonte,
+            respostasDados.descarte,
+            respostasDados.recuperacao,
+            respostasDados.reciclagem,
+            respostasDados.durabilidade,
+            respostasDados.reparavel,
+            respostasDados.reaproveitavel,
+            respostasDados.ciclo_estendido,
+            respostasDados.ciclo_rastreado,
+            respostasDados.documentacao,
+            pontuacaoDados.pontos,
+            pontuacaoDados.percentual,
+            Number(pontuacaoDados.pcm ?? pontuacaoDados.perfilCircularidadeMateriais ?? pontuacaoDados.maturidade ?? 0)
         ];
 
         const questionarioColumns = [
             'empresa_id', 'materia_prima', 'residuos', 'desmonte', 'descarte', 'recuperacao', 'reciclagem',
             'durabilidade', 'reparavel', 'reaproveitavel', 'ciclo_estendido', 'ciclo_rastreado', 'documentacao',
-            'soma', 'indice_global_circularidade', 'indice_pcm'
+            'soma', 'indice_global_circularidade', questionarioIndicePcmColumn
         ];
 
         if (hasRelatorioHtmlColumn) {
@@ -1048,33 +1097,27 @@ app.post('/api/questionario', async (req, res) => {
             empresaExistente: existingEmpresa.rows.length > 0
         };
 
-        // 3. Salvar no Google Drive (se autenticado)
-        if (driveService.isAuthenticated() && relatorioHtml) {
-            try {
-                console.log('💾 Salvando relatório no Google Drive...');
-                const fileName = `Relatorio_${empresa.nomeEmpresa.replace(/\s+/g, '_')}_${Date.now()}.doc`;
-                const driveResult = await driveService.saveFile(
-                    relatorioHtml,
-                    fileName,
-                    `Relatório de Circularidade - ${empresa.nomeEmpresa} - Índice: ${pontuacao.percentual}%`
-                );
-                responseData.driveSaved = true;
-                responseData.driveUrl = driveResult.viewUrl;
-                console.log('✅ Relatório salvo no Drive:', driveResult.viewUrl);
-            } catch (driveError) {
-                console.warn('⚠️ Erro ao salvar no Drive:', driveError);
-                responseData.driveSaved = false;
-                responseData.driveError = driveError.message;
-            }
-        } else {
-            if (!driveService.isAuthenticated()) {
-                console.warn('⚠️ Google Drive não autenticado - relatório não salvo no Drive');
-            }
-            responseData.driveSaved = false;
-            responseData.driveError = driveService.isAuthenticated() ? 'HTML não fornecido' : 'Google Drive não autenticado';
-        }
-
         res.json(responseData);
+
+        // 3. Salvar no Google Drive em segundo plano, sem bloquear a resposta ao usuário
+        if (driveService.isAuthenticated() && relatorioHtml) {
+            setImmediate(async () => {
+                try {
+                    console.log('💾 Salvando relatório no Google Drive...');
+                    const fileName = `Relatorio_${normalizarTexto(empresaDados.nomeEmpresa || 'empresa').replace(/\s+/g, '_')}_${Date.now()}.doc`;
+                    const driveResult = await driveService.saveFile(
+                        relatorioHtml,
+                        fileName,
+                        `Relatório de Circularidade - ${normalizarTexto(empresaDados.nomeEmpresa || 'empresa')} - Índice: ${pontuacaoDados.percentual}%`
+                    );
+                    console.log('✅ Relatório salvo no Drive:', driveResult.viewUrl);
+                } catch (driveError) {
+                    console.warn('⚠️ Erro ao salvar no Drive:', driveError);
+                }
+            });
+        } else if (!driveService.isAuthenticated()) {
+            console.warn('⚠️ Google Drive não autenticado - relatório não salvo no Drive');
+        }
 
     } catch (error) {
         await client.query('ROLLBACK');
@@ -1094,7 +1137,7 @@ app.get('/api/questionarios', async (req, res) => {
         const result = await pool.query(`
             SELECT
                 e.nome_empresa, e.cidade, e.produto_avaliado,
-                q.indice_global_circularidade, q.indice_pcm,
+                q.indice_global_circularidade, q.${questionarioIndicePcmColumn} AS indice_pcm,
                 q.created_at
             FROM questionarios q
             INNER JOIN empresas e ON q.empresa_id = e.id
@@ -1330,7 +1373,7 @@ app.get('/api/admin/respostas', async (req, res) => {
                 q.id AS questionario_id,
                 q.created_at,
                 q.indice_global_circularidade,
-                q.indice_pcm,
+                q.${questionarioIndicePcmColumn} AS indice_pcm,
                 ${htmlSelect},
                 e.nome_responsavel,
                 e.nome_empresa,
@@ -1379,7 +1422,7 @@ app.get('/api/admin/respostas/:id/pdf', async (req, res) => {
                 q.created_at,
                 q.soma,
                 q.indice_global_circularidade,
-                q.indice_pcm,
+                q.${questionarioIndicePcmColumn} AS indice_pcm,
                 q.materia_prima, q.residuos, q.desmonte, q.descarte, q.recuperacao, q.reciclagem,
                 q.durabilidade, q.reparavel, q.reaproveitavel, q.ciclo_estendido, q.ciclo_rastreado, q.documentacao,
                 e.nome_responsavel, e.nome_empresa, e.cidade, e.uf, e.setor_economico, e.produto_avaliado
