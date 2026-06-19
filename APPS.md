@@ -1,17 +1,19 @@
 # Aplicativos da pasta
 
-Esta pasta contem 3 aplicativos distintos:
+Esta pasta contem 4 aplicativos distintos:
 
-1. `index.html`
+1. `formulario-github/`
+Formulário principal (Questionário de Circularidade 2.0). Contem o formulário, lógica (app-postgres.js), configuração (config.js) e estilos. Backend e dashboards não estão mais duplicados aqui — usam as versões da raiz.
+
+2. `index.html`
 Painel de relatórios com acesso aos registros respondidos.
 
-2. `dashboard-circularidade/`
-Dashboard analitico com consolidacao e analise dos resultados.
+3. `dashboard-circularidade/`
+Dashboard analítico com consolidação e análise dos resultados.
 
-3. `dashboard-gerencial/`
-Dashboard administrativo com lista de formularios respondidos e acesso ao HTML e ao PDF de cada relatorio.
+4. `dashboard-gerencial/`
+Dashboard administrativo com lista de formulários respondidos e acesso ao HTML e ao PDF de cada relatório.
 
-## Observacao
+## Backend
 
-O arquivo legado `painel-relatorios.html` continua na raiz como acesso rapido ao dashboard gerencial, mas a estrutura oficial do terceiro app agora esta em `dashboard-gerencial/`.
-O formulario principal nao esta presente nesta pasta.
+`backend/` — API Express + PostgreSQL Railway, atendendo todos os apps acima.
