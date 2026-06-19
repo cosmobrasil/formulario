@@ -1,4 +1,19 @@
 (function () {
+  const FETCH_TIMEOUT_MS = 15000;
+  function fetchComTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { ...options, signal: controller.signal })
+      .finally(() => clearTimeout(timer));
+  }
+  function mostrarStatus(texto, tipo) {
+    const el = document.getElementById('statusMsg');
+    if (!el) return;
+    el.textContent = texto;
+    el.className = 'status-msg' + (tipo ? ' status-' + tipo : '');
+    el.hidden = false;
+  }
+
   const RAILWAY_API_BASE = 'https://formulario-production-8df7.up.railway.app';
   const isLocal = window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1';
   const isNetlify = window.location.hostname.endsWith('netlify.app');
@@ -69,7 +84,7 @@
   async function getJSON(path, filtros = {}, options = {}) {
     const query = paramsToQuery(filtros);
     const url = `${API_BASE}${path}${query ? `?${query}` : ''}`;
-    const response = await fetch(url, {
+    const response = await fetchComTimeout(url, {
       headers: buildHeaders(options.headers || {})
     });
     const contentType = (response.headers.get('content-type') || '').toLowerCase();
@@ -84,7 +99,7 @@
   async function getText(path, filtros = {}, options = {}) {
     const query = paramsToQuery(filtros);
     const url = `${API_BASE}${path}${query ? `?${query}` : ''}`;
-    const response = await fetch(url, {
+    const response = await fetchComTimeout(url, {
       headers: buildHeaders(options.headers || {})
     });
     if (!response.ok) {
@@ -463,13 +478,15 @@
 
       renderCharts(data);
       recomendacoesPorTopico(data.topicos || {});
+      mostrarStatus('', '');
     } catch (error) {
       console.error('Erro ao atualizar dashboard:', error);
-      alert('Falha ao atualizar dashboard. Verifique backend, filtros e token administrativo.');
+      mostrarStatus(error.message || 'Falha ao atualizar dashboard.', 'erro');
     }
   }
 
   async function atualizarTudo() {
+    mostrarStatus('Atualizando...', 'info');
     await atualizarDashboard();
 
     const resultados = await Promise.allSettled([carregarFiltros()]);

@@ -168,6 +168,23 @@
         return isLocal ? 'http://localhost:3000' : (isNetlify ? '' : API_BASE_DEFAULT);
       }
 
+      const FETCH_TIMEOUT_MS = 15000;
+      function fetchComTimeout(url, options) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+        return fetch(url, { ...options, signal: controller.signal })
+          .finally(() => clearTimeout(timer));
+      }
+      async function fetchJson(url) {
+        const response = await fetchComTimeout(url);
+        const ct = (response.headers.get('content-type') || '').toLowerCase();
+        const data = ct.includes('application/json') ? await response.json() : null;
+        if (!response.ok || !data) {
+          throw new Error(data && data.error ? data.error : `Erro ${response.status}`);
+        }
+        return data;
+      }
+
       const API_BASE = resolveApiBase();
       const ADMIN_PASSWORD = 'Cosmob2026@';
 
@@ -218,13 +235,9 @@
         const url = `${API_BASE}/api/admin/respostas${qs ? `?${qs}` : ''}`;
 
         try {
-          const response = await fetch(url);
-          const contentType = (response.headers.get('content-type') || '').toLowerCase();
-          const data = contentType.includes('application/json')
-            ? await response.json()
-            : { success: false, error: 'Resposta inválida do servidor (esperado JSON).' };
+          const data = await fetchJson(url);
 
-          if (!response.ok || !data.success) {
+          if (!data.success) {
             throw new Error(data.error || 'Falha ao carregar lista.');
           }
 
