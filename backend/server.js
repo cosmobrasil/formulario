@@ -15,6 +15,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const ENABLE_DEBUG_ENDPOINTS = process.env.ENABLE_DEBUG_ENDPOINTS === 'true';
 const CNPJ_API_TIMEOUT_MS = parseInt(process.env.CNPJ_API_TIMEOUT_MS || '8000', 10);
 const ADMIN_PANEL_TOKEN = (process.env.ADMIN_PANEL_TOKEN || '').trim();
+const ENABLE_RUNTIME_SCHEMA_AUTOFIX = process.env.ENABLE_RUNTIME_SCHEMA_AUTOFIX === 'true' || !IS_PRODUCTION;
 let hasUfColumn = false;
 let hasUnaccentExtension = false;
 let hasRelatorioHtmlColumn = false;
@@ -49,7 +50,7 @@ app.use(cors({
         return callback(new Error('Origem não permitida por CORS.'));
     },
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type']
+    allowedHeaders: ['Content-Type', 'x-admin-token']
 }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../')));
@@ -109,12 +110,16 @@ async function carregarRecursosBanco() {
         console.log(`🧭 Extensão unaccent disponível: ${hasUnaccentExtension ? 'SIM' : 'NÃO'}`);
 
         if (!hasRelatorioHtmlColumn) {
-            try {
-                await pool.query('ALTER TABLE questionarios ADD COLUMN relatorio_html TEXT');
-                hasRelatorioHtmlColumn = true;
-                console.log('✅ Coluna questionarios.relatorio_html criada automaticamente.');
-            } catch (migrationError) {
-                console.warn('⚠️ Não foi possível criar questionarios.relatorio_html automaticamente:', migrationError.message);
+            if (ENABLE_RUNTIME_SCHEMA_AUTOFIX) {
+                try {
+                    await pool.query('ALTER TABLE public.questionarios ADD COLUMN IF NOT EXISTS relatorio_html TEXT');
+                    hasRelatorioHtmlColumn = true;
+                    console.log('✅ Coluna questionarios.relatorio_html garantida no banco.');
+                } catch (migrationError) {
+                    console.warn('⚠️ Não foi possível garantir questionarios.relatorio_html automaticamente:', migrationError.message);
+                }
+            } else {
+                console.warn('⚠️ Coluna questionarios.relatorio_html ausente. Aplique a migration backend/migrations/2026-06-19-add-relatorio-html.sql.');
             }
         }
     } catch (error) {
@@ -136,7 +141,19 @@ app.get('/api/health', async (req, res) => {
         res.json({
             status: 'ok',
             database: 'connected',
-            timestamp: result.rows[0].now
+            timestamp: result.rows[0].now,
+            schema: {
+                empresasUf: hasUfColumn,
+                questionariosRelatorioHtml: hasRelatorioHtmlColumn,
+                unaccent: hasUnaccentExtension,
+                runtimeSchemaAutofix: ENABLE_RUNTIME_SCHEMA_AUTOFIX
+            },
+            auth: {
+                adminPanelTokenConfigured: Boolean(ADMIN_PANEL_TOKEN)
+            },
+            drive: {
+                authenticated: driveService.isAuthenticated()
+            }
         });
     } catch (error) {
         console.error('Erro no health check:', error);
@@ -347,6 +364,111 @@ function mediaPercentualPerguntas(listaPerguntas, medias) {
     return Math.round(soma / listaPerguntas.length);
 }
 
+const QUESTIONARIO_RESPOSTA_CAMPOS = [
+    'materia_prima',
+    'residuos',
+    'desmonte',
+    'descarte',
+    'recuperacao',
+    'reciclagem',
+    'durabilidade',
+    'reparavel',
+    'reaproveitavel',
+    'ciclo_estendido',
+    'ciclo_rastreado',
+    'documentacao'
+];
+
+function sanitizarNomeArquivo(valor) {
+    return normalizarTexto(valor)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 80) || 'empresa';
+}
+
+function validarPayloadQuestionario(payload) {
+    const erros = [];
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return ['Corpo da requisição inválido.'];
+    }
+
+    if (!payload.empresa || typeof payload.empresa !== 'object' || Array.isArray(payload.empresa)) {
+        erros.push('Campo empresa é obrigatório.');
+    }
+
+    if (!payload.respostas || typeof payload.respostas !== 'object' || Array.isArray(payload.respostas)) {
+        erros.push('Campo respostas é obrigatório.');
+    }
+
+    if (!payload.pontuacao || typeof payload.pontuacao !== 'object' || Array.isArray(payload.pontuacao)) {
+        erros.push('Campo pontuacao é obrigatório.');
+    }
+
+    if ('relatorioHtml' in payload && payload.relatorioHtml != null && typeof payload.relatorioHtml !== 'string') {
+        erros.push('Campo relatorioHtml deve ser texto quando informado.');
+    }
+
+    if (payload.respostas && typeof payload.respostas === 'object' && !Array.isArray(payload.respostas)) {
+        const faltantes = QUESTIONARIO_RESPOSTA_CAMPOS.filter((campo) => !(campo in payload.respostas));
+        if (faltantes.length > 0) {
+            erros.push(`Campos de respostas ausentes: ${faltantes.join(', ')}.`);
+        }
+    }
+
+    if (payload.pontuacao && typeof payload.pontuacao === 'object' && !Array.isArray(payload.pontuacao)) {
+        const pontuacao = payload.pontuacao;
+        if (!('pontos' in pontuacao)) {
+            erros.push('Campo pontuacao.pontos é obrigatório.');
+        }
+        if (!('percentual' in pontuacao)) {
+            erros.push('Campo pontuacao.percentual é obrigatório.');
+        }
+    }
+
+    return erros;
+}
+
+function agendarUploadDrive({ relatorioHtml, nomeEmpresa, pontuacaoPercentual }) {
+    if (!driveService.isAuthenticated()) {
+        return {
+            scheduled: false,
+            reason: 'Google Drive não autenticado'
+        };
+    }
+
+    if (!relatorioHtml) {
+        return {
+            scheduled: false,
+            reason: 'HTML não fornecido'
+        };
+    }
+
+    const fileName = `Relatorio_${sanitizarNomeArquivo(nomeEmpresa)}_${Date.now()}.doc`;
+    const descricao = `Relatório de Circularidade - ${nomeEmpresa} - Índice: ${pontuacaoPercentual}%`;
+
+    setImmediate(() => {
+        (async () => {
+            try {
+                console.log('💾 Salvando relatório no Google Drive em segundo plano...');
+                const driveResult = await driveService.saveFile(relatorioHtml, fileName, descricao);
+                console.log('✅ Relatório salvo no Drive:', driveResult.viewUrl);
+            } catch (driveError) {
+                console.warn('⚠️ Erro ao salvar no Drive em segundo plano:', driveError);
+            }
+        })().catch((error) => {
+            console.warn('⚠️ Falha inesperada no fluxo assíncrono do Google Drive:', error);
+        });
+    });
+
+    return {
+        scheduled: true,
+        fileName
+    };
+}
+
 // Endpoint para consulta de CNPJ via EmpresaAqui
 app.get('/api/cnpj/:cnpj', async (req, res) => {
     const { cnpj } = req.params;
@@ -448,6 +570,15 @@ app.get('/api/cnpj/:cnpj', async (req, res) => {
 
 // Endpoint para salvar questionário
 app.post('/api/questionario', async (req, res) => {
+    const validationErrors = validarPayloadQuestionario(req.body);
+    if (validationErrors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Payload inválido para o questionário.',
+            details: validationErrors
+        });
+    }
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -612,33 +743,24 @@ app.post('/api/questionario', async (req, res) => {
             success: true,
             empresaId: empresaId,
             questionarioId: questionarioResult.rows[0].id,
-            empresaExistente: existingEmpresa.rows.length > 0
+            empresaExistente: existingEmpresa.rows.length > 0,
+            driveQueued: false
         };
 
-        // 3. Salvar no Google Drive (se autenticado)
-        if (driveService.isAuthenticated() && relatorioHtml) {
-            try {
-                console.log('💾 Salvando relatório no Google Drive...');
-                const fileName = `Relatorio_${nomeEmpresa.replace(/\s+/g, '_')}_${Date.now()}.doc`;
-                const driveResult = await driveService.saveFile(
-                    relatorioHtml,
-                    fileName,
-                    `Relatório de Circularidade - ${nomeEmpresa} - Índice: ${pontuacao.percentual}%`
-                );
-                responseData.driveSaved = true;
-                responseData.driveUrl = driveResult.viewUrl;
-                console.log('✅ Relatório salvo no Drive:', driveResult.viewUrl);
-            } catch (driveError) {
-                console.warn('⚠️ Erro ao salvar no Drive:', driveError);
-                responseData.driveSaved = false;
-                responseData.driveError = driveError.message;
-            }
+        // 3. Salvar no Google Drive em segundo plano, sem bloquear a resposta principal
+        const driveDispatch = agendarUploadDrive({
+            relatorioHtml,
+            nomeEmpresa,
+            pontuacaoPercentual: pontuacao.percentual
+        });
+        responseData.driveQueued = driveDispatch.scheduled;
+        if (driveDispatch.scheduled) {
+            responseData.driveStatus = 'scheduled';
+            responseData.driveFileName = driveDispatch.fileName;
         } else {
-            if (!driveService.isAuthenticated()) {
-                console.warn('⚠️ Google Drive não autenticado - relatório não salvo no Drive');
-            }
+            responseData.driveStatus = 'skipped';
             responseData.driveSaved = false;
-            responseData.driveError = driveService.isAuthenticated() ? 'HTML não fornecido' : 'Google Drive não autenticado';
+            responseData.driveError = driveDispatch.reason;
         }
 
         res.json(responseData);

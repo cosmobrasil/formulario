@@ -3,9 +3,11 @@
   const isLocal = window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1';
   const isNetlify = window.location.hostname.endsWith('netlify.app');
   const apiBaseFromQuery = new URLSearchParams(window.location.search).get('apiBase');
+  const apiBaseFromGlobal = window.__API_BASE__;
   const apiBaseFromStorage = window.localStorage.getItem('dashboardCircularidadeApiBase');
   const isLocalBackendHost = isLocal && window.location.port === '3000';
   const API_BASE = apiBaseFromQuery
+    || apiBaseFromGlobal
     || apiBaseFromStorage
     || (isNetlify ? '' : (isLocalBackendHost ? '' : RAILWAY_API_BASE));
 

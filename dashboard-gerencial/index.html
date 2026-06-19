@@ -195,10 +195,24 @@
 
   <script>
     (function () {
-      const isLocal = location.hostname.includes('localhost') || location.hostname === '127.0.0.1';
-      const isNetlify = location.hostname.endsWith('netlify.app');
-      const API_BASE = isLocal ? 'http://localhost:3000' : (isNetlify ? '' : 'https://formulario-production-8df7.up.railway.app');
+      const API_BASE_DEFAULT = 'https://formulario-production-8df7.up.railway.app';
+      const ACCESS_TOKEN_KEY = 'dashboardGerencialAccessToken';
       const ADMIN_PASSWORD = 'Cosmob2026@';
+
+      function resolveApiBase() {
+        const params = new URLSearchParams(window.location.search);
+        const explicitBase = params.get('apiBase') || window.__API_BASE__;
+        if (explicitBase) return explicitBase;
+
+        const storedBase = window.localStorage.getItem('dashboardGerencialApiBase');
+        if (storedBase) return storedBase;
+
+        const isLocal = location.hostname.includes('localhost') || location.hostname === '127.0.0.1';
+        const isNetlify = location.hostname.endsWith('netlify.app');
+        return isLocal ? 'http://localhost:3000' : (isNetlify ? '' : API_BASE_DEFAULT);
+      }
+
+      const API_BASE = resolveApiBase();
 
       const gate = document.getElementById('gate');
       const gateForm = document.getElementById('gateForm');
@@ -237,6 +251,7 @@
           throw new Error('Senha inválida.');
         }
 
+        sessionStorage.setItem(ACCESS_TOKEN_KEY, token);
         setLocked(false);
       }
 
@@ -322,6 +337,12 @@
 
       loadBtn.addEventListener('click', carregar);
       setLocked(true);
+
+      const storedToken = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+      if (storedToken === ADMIN_PASSWORD) {
+        setLocked(false);
+        carregar();
+      }
     })();
   </script>
 </body>
