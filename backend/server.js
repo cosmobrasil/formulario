@@ -8,6 +8,7 @@ const path = require('path');
 const PDFDocument = require('pdfkit');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const GoogleDriveService = require('./google-drive-service');
+const log = require('./logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -77,11 +78,11 @@ const pool = new Pool({
 
 // Verificar conexão com o banco
 pool.on('connect', () => {
-    console.log('✅ Conectado ao PostgreSQL Railway');
+    log.info('DB', 'Conectado ao PostgreSQL Railway');
 });
 
 pool.on('error', (err) => {
-    console.error('❌ Erro na conexão PostgreSQL:', err);
+    log.error('DB', 'Erro na conexão PostgreSQL', { error: err.message });
 });
 
 async function carregarRecursosBanco() {
@@ -126,22 +127,23 @@ async function carregarRecursosBanco() {
         const hasIndicePcmColumn = !!result.rows[0]?.has_indice_pcm;
         const hasLegacyIndicePcmColumn = !!result.rows[0]?.has_legacy_indice_pcm;
         hasUnaccentExtension = !!result.rows[0]?.has_unaccent;
-        console.log(`🧭 Coluna empresas.uf disponível: ${hasUfColumn ? 'SIM' : 'NÃO'}`);
-        console.log(`🧭 Coluna questionarios.relatorio_html disponível: ${hasRelatorioHtmlColumn ? 'SIM' : 'NÃO'}`);
-        console.log(`🧭 Coluna questionarios.indice_pcm disponível: ${hasIndicePcmColumn ? 'SIM' : 'NÃO'}`);
-        console.log(`🧭 Coluna questionarios.indice_maturidade_estruturante disponível: ${hasLegacyIndicePcmColumn ? 'SIM' : 'NÃO'}`);
-        console.log(`🧭 Extensão unaccent disponível: ${hasUnaccentExtension ? 'SIM' : 'NÃO'}`);
+        log.info('SCHEMA', 'Colunas detectadas', {
+            empresas_uf: hasUfColumn,
+            questionarios_relatorio_html: hasRelatorioHtmlColumn,
+            questionarios_indice_pcm: hasIndicePcmColumn,
+            indice_maturidade_estruturante: hasLegacyIndicePcmColumn,
+            unaccent: hasUnaccentExtension,
+        });
 
         if (!hasRelatorioHtmlColumn) {
-            console.warn('⚠️ Coluna questionarios.relatorio_html AUSENTE. Execute a migration:');
-            console.warn('   psql "$PGURL" -f backend/migrations/2026-06-19-add-relatorio-html.sql');
+            log.warn('SCHEMA', 'relatorio_html ausente. Execute backend/migrations/2026-06-19-add-relatorio-html.sql');
             if (!IS_PRODUCTION) {
                 try {
                     await pool.query('ALTER TABLE questionarios ADD COLUMN IF NOT EXISTS relatorio_html TEXT');
                     hasRelatorioHtmlColumn = true;
-                    console.log('✅ Coluna questionarios.relatorio_html criada automaticamente (apenas dev).');
+                    log.info('SCHEMA', 'relatorio_html criada automaticamente (dev)');
                 } catch (migrationError) {
-                    console.warn('⚠️ Falha ao criar relatorio_html automaticamente:', migrationError.message);
+                    log.error('SCHEMA', 'Falha ao criar relatorio_html', { error: migrationError.message });
                 }
             }
         }
@@ -152,44 +154,95 @@ async function carregarRecursosBanco() {
             try {
                 await pool.query('ALTER TABLE questionarios RENAME COLUMN indice_maturidade_estruturante TO indice_pcm');
                 questionarioIndicePcmColumn = 'indice_pcm';
-                console.log('✅ Coluna questionarios.indice_maturidade_estruturante renomeada para indice_pcm automaticamente.');
+                log.info('SCHEMA', 'indice_maturidade_estruturante renomeada para indice_pcm');
             } catch (migrationError) {
                 questionarioIndicePcmColumn = 'indice_maturidade_estruturante';
-                console.warn('⚠️ Não foi possível renomear questionarios.indice_maturidade_estruturante automaticamente:', migrationError.message);
+                log.error('SCHEMA', 'Falha ao renomear coluna PCM', { error: migrationError.message });
             }
         } else {
             questionarioIndicePcmColumn = 'indice_pcm';
-            console.warn('⚠️ Nenhuma coluna de PCM foi encontrada em questionarios.');
+            log.warn('SCHEMA', 'Nenhuma coluna PCM encontrada em questionarios');
         }
     } catch (error) {
         hasUfColumn = false;
         hasRelatorioHtmlColumn = false;
         hasUnaccentExtension = false;
         questionarioIndicePcmColumn = 'indice_pcm';
-        console.warn('⚠️ Não foi possível validar coluna UF no banco.');
+        log.error('SCHEMA', 'Falha ao validar schema do banco', { error: error.message });
     }
 }
 
 carregarRecursosBanco();
 
-// Testar conexão
+// Health check detalhado
+async function verificarBanco() {
+    const client = await pool.connect();
+    const result = await client.query('SELECT NOW() AS agora');
+    client.release();
+    return { connected: true, time: result.rows[0].agora };
+}
+
 app.get('/api/health', async (req, res) => {
     try {
-        const client = await pool.connect();
-        const result = await client.query('SELECT NOW()');
-        client.release();
+        const db = await verificarBanco();
         res.json({
             status: 'ok',
             database: 'connected',
-            timestamp: result.rows[0].now
+            timestamp: db.time,
+            schema: {
+                empresasUf: hasUfColumn,
+                questionariosRelatorioHtml: hasRelatorioHtmlColumn,
+                unaccent: hasUnaccentExtension,
+            },
+            drive: { authenticated: driveService.isAuthenticated() },
+            auth: { adminTokenConfigured: Boolean(ADMIN_PANEL_TOKEN) },
+            env: { production: IS_PRODUCTION, port: PORT }
         });
     } catch (error) {
-        console.error('Erro no health check:', error);
-        res.status(500).json({
-            status: 'error',
-            message: IS_PRODUCTION ? 'Falha ao verificar banco de dados.' : error.message
-        });
+        log.error('API', 'Health check falhou', { error: error.message });
+        res.status(503).json({ status: 'error', database: 'disconnected' });
     }
+});
+
+// Status detalhado com test de dependências
+app.get('/api/status', async (req, res) => {
+    const deps = {};
+
+    // Database
+    try {
+        const db = await verificarBanco();
+        deps.database = { status: 'ok', time: db.time };
+    } catch (error) {
+        deps.database = { status: 'error', error: error.message };
+    }
+
+    // Schema
+    deps.schema = {
+        empresasUf: hasUfColumn,
+        relatorioHtml: hasRelatorioHtmlColumn,
+        unaccent: hasUnaccentExtension,
+    };
+
+    // Drive
+    deps.drive = {
+        authenticated: driveService.isAuthenticated(),
+        hasRefreshToken: Boolean(driveService.refreshToken),
+    };
+
+    // Auth
+    deps.auth = {
+        adminTokenConfigured: Boolean(ADMIN_PANEL_TOKEN),
+    };
+
+    const allOk = Object.values(deps).every(d => d.status !== 'error');
+    res.status(allOk ? 200 : 503).json({
+        app: 'Questionário de Circularidade 2026',
+        version: '2.0',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        environment: IS_PRODUCTION ? 'production' : 'development',
+        dependencies: deps,
+    });
 });
 
 // Função para limpar CNPJ (remover formatação)
@@ -902,13 +955,13 @@ app.get('/api/cnpj/:cnpj', async (req, res) => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), CNPJ_API_TIMEOUT_MS);
         try {
-            console.log(`🔍 Consultando CNPJ (EmpresaAqui): ${mascararCNPJ(cnpjLimpo)}`);
+            log.info('CNPJ', `Consultando ${mascararCNPJ(cnpjLimpo)} via EmpresaAqui`);
             result = await consultarCnpjEmpresaqui(cnpjLimpo, token, controller.signal);
             if (result) {
-                console.log('✅ Dados obtidos via EmpresaAqui');
+                log.info('CNPJ', 'Dados obtidos via EmpresaAqui');
             }
         } catch (error) {
-            console.warn('⚠️ EmpresaAqui falhou:', error.name === 'AbortError' ? 'timeout' : error.message);
+            log.warn('CNPJ', `EmpresaAqui falhou: ${error.name === 'AbortError' ? 'timeout' : error.message}`);
             fallbackAtivo = true;
         } finally {
             clearTimeout(timeout);
@@ -922,13 +975,13 @@ app.get('/api/cnpj/:cnpj', async (req, res) => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), CNPJ_API_TIMEOUT_MS);
         try {
-            console.log(`🔍 Consultando CNPJ (BrasilAPI fallback): ${mascararCNPJ(cnpjLimpo)}`);
+            log.info('CNPJ', `Fallback BrasilAPI: ${mascararCNPJ(cnpjLimpo)}`);
             result = await consultarCnpjFallback(cnpjLimpo, controller.signal);
             if (result) {
-                console.log('✅ Dados obtidos via BrasilAPI (fallback)');
+                log.info('CNPJ', 'Dados obtidos via BrasilAPI (fallback)');
             }
         } catch (error) {
-            console.warn('⚠️ BrasilAPI fallback também falhou:', error.name === 'AbortError' ? 'timeout' : error.message);
+            log.warn('CNPJ', `BrasilAPI falhou: ${error.name === 'AbortError' ? 'timeout' : error.message}`);
         } finally {
             clearTimeout(timeout);
         }
@@ -973,7 +1026,7 @@ app.post('/api/questionario', async (req, res) => {
             celularLimpo = '00000000000';
         }
 
-        console.log('📝 Dados do questionário recebidos.');
+        log.info('API', 'Questionário recebido', { empresa: empresaDados.nomeEmpresa });
 
         // 1. Verificar se empresa já existe pelo CNPJ limpo
         let empresaId;
@@ -1114,20 +1167,20 @@ app.post('/api/questionario', async (req, res) => {
         if (driveService.isAuthenticated() && relatorioHtml) {
             setImmediate(async () => {
                 try {
-                    console.log('💾 Salvando relatório no Google Drive...');
                     const fileName = `Relatorio_${normalizarTexto(empresaDados.nomeEmpresa || 'empresa').replace(/\s+/g, '_')}_${Date.now()}.doc`;
+                    log.info('DRIVE', 'Salvando relatório', { fileName });
                     const driveResult = await driveService.saveFile(
                         relatorioHtml,
                         fileName,
                         `Relatório de Circularidade - ${normalizarTexto(empresaDados.nomeEmpresa || 'empresa')} - Índice: ${pontuacaoDados.percentual}%`
                     );
-                    console.log('✅ Relatório salvo no Drive:', driveResult.viewUrl);
+                    log.info('DRIVE', 'Relatório salvo', { url: driveResult.viewUrl });
                 } catch (driveError) {
-                    console.warn('⚠️ Erro ao salvar no Drive:', driveError);
+                    log.error('DRIVE', 'Erro ao salvar', { error: driveError.message });
                 }
             });
         } else if (!driveService.isAuthenticated()) {
-            console.warn('⚠️ Google Drive não autenticado - relatório não salvo no Drive');
+            log.warn('DRIVE', 'Não autenticado — relatório não salvo no Drive');
         }
 
     } catch (error) {
@@ -1752,6 +1805,7 @@ app.use((err, req, res, next) => {
 
 // Iniciar servidor
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
-    console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+    log.info('INIT', `Servidor rodando em http://localhost:${PORT}`);
+    log.info('INIT', `Health: http://localhost:${PORT}/api/health`);
+    log.info('INIT', `Status: http://localhost:${PORT}/api/status`);
 });
