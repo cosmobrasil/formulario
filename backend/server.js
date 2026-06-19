@@ -44,9 +44,9 @@ const originAllowlist = new Set(allowedOrigins.length > 0 ? allowedOrigins : def
 
 app.use(cors({
     origin(origin, callback) {
-        if (!origin || originAllowlist.has(origin)) {
-            return callback(null, true);
-        }
+        if (!origin) return callback(null, true);
+        if (originAllowlist.has(origin)) return callback(null, true);
+        if (/^https:\/\/[^/]+\.netlify\.app\b/i.test(origin)) return callback(null, true);
         return callback(new Error('Origem não permitida por CORS.'));
     },
     methods: ['GET', 'POST', 'OPTIONS'],
@@ -110,16 +110,16 @@ async function carregarRecursosBanco() {
         console.log(`🧭 Extensão unaccent disponível: ${hasUnaccentExtension ? 'SIM' : 'NÃO'}`);
 
         if (!hasRelatorioHtmlColumn) {
-            if (ENABLE_RUNTIME_SCHEMA_AUTOFIX) {
+            console.warn('⚠️ Coluna questionarios.relatorio_html AUSENTE. Execute a migration:');
+            console.warn('   psql "$PGURL" -f backend/migrations/2026-06-19-add-relatorio-html.sql');
+            if (!IS_PRODUCTION) {
                 try {
                     await pool.query('ALTER TABLE public.questionarios ADD COLUMN IF NOT EXISTS relatorio_html TEXT');
                     hasRelatorioHtmlColumn = true;
-                    console.log('✅ Coluna questionarios.relatorio_html garantida no banco.');
+                    console.log('✅ Coluna questionarios.relatorio_html criada automaticamente (apenas dev).');
                 } catch (migrationError) {
-                    console.warn('⚠️ Não foi possível garantir questionarios.relatorio_html automaticamente:', migrationError.message);
+                    console.warn('⚠️ Falha ao criar relatorio_html automaticamente:', migrationError.message);
                 }
-            } else {
-                console.warn('⚠️ Coluna questionarios.relatorio_html ausente. Aplique a migration backend/migrations/2026-06-19-add-relatorio-html.sql.');
             }
         }
     } catch (error) {
@@ -469,18 +469,53 @@ function agendarUploadDrive({ relatorioHtml, nomeEmpresa, pontuacaoPercentual })
     };
 }
 
-// Endpoint para consulta de CNPJ via EmpresaAqui
+async function consultarCnpjEmpresaqui(cnpj, token, signal) {
+    const response = await fetch(
+        `https://www.empresaqui.com.br/api/${token}/${cnpj}`,
+        { signal }
+    );
+    const bodyText = await response.text();
+    let data = null;
+    try {
+        data = bodyText ? JSON.parse(bodyText) : null;
+    } catch {
+        data = null;
+    }
+    if (!response.ok || !data || data.erro) return null;
+    return {
+        razao: data.razao,
+        fantasia: data.fantasia,
+        email: data.email,
+        telefone: `${data.ddd_1 || ''}${data.tel_1 || ''}`,
+        cidade: data.log_municipio,
+        uf: data.log_uf,
+        cnae_principal: data.cnae_principal
+    };
+}
+
+async function consultarCnpjFallback(cnpj, signal) {
+    const response = await fetch(
+        `https://brasilapi.com.br/api/cnpj/v1/${cnpj}`,
+        { signal }
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    return {
+        razao: data.razao_social,
+        fantasia: data.nome_fantasia,
+        email: data.email,
+        telefone: `${data.ddd_telefone_1 || ''}`,
+        cidade: data.municipio,
+        uf: data.uf,
+        cnae_principal: data.cnae_fiscal
+    };
+}
+
+// Endpoint para consulta de CNPJ com fallback automático
 app.get('/api/cnpj/:cnpj', async (req, res) => {
     const { cnpj } = req.params;
     const token = process.env.EMPRESAQUI_TOKEN;
     const cnpjLimpo = limparCNPJ(cnpj);
-
-    if (!token || token === 'SEU_TOKEN_AQUI') {
-        return res.status(500).json({
-            success: false,
-            error: 'Token da API EmpresaAqui não configurado no servidor.'
-        });
-    }
 
     if (!validarCNPJ(cnpjLimpo)) {
         return res.status(400).json({
@@ -489,83 +524,58 @@ app.get('/api/cnpj/:cnpj', async (req, res) => {
         });
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), CNPJ_API_TIMEOUT_MS);
+    let result = null;
+    let fallbackAtivo = false;
 
-    try {
-        console.log(`🔍 Consultando CNPJ: ${mascararCNPJ(cnpjLimpo)}`);
-
-        const response = await fetch(
-            `https://www.empresaqui.com.br/api/${token}/${cnpjLimpo}`,
-            { signal: controller.signal }
-        );
-
-        const bodyText = await response.text();
-        let data = null;
-
+    // Tentativa 1: EmpresaAqui
+    if (token && token !== 'SEU_TOKEN_AQUI') {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), CNPJ_API_TIMEOUT_MS);
         try {
-            data = bodyText ? JSON.parse(bodyText) : null;
-        } catch {
-            data = null;
-        }
-
-        if (response.status === 404) {
-            return res.status(404).json({
-                success: false,
-                error: 'CNPJ não encontrado.'
-            });
-        }
-
-        if (response.status === 401 || response.status === 403) {
-            return res.status(502).json({
-                success: false,
-                error: 'Falha de autenticação com o provedor de CNPJ.'
-            });
-        }
-
-        if (!response.ok) {
-            return res.status(502).json({
-                success: false,
-                error: 'Falha temporária ao consultar provedor de CNPJ.'
-            });
-        }
-
-        if (!data || data.erro) {
-            return res.status(404).json({
-                success: false,
-                error: data.erro || 'CNPJ não encontrado ou erro na consulta.'
-            });
-        }
-
-        res.json({
-            success: true,
-            data: {
-                razao: data.razao,
-                fantasia: data.fantasia,
-                email: data.email,
-                telefone: `${data.ddd_1 || ''}${data.tel_1 || ''}`,
-                cidade: data.log_municipio,
-                uf: data.log_uf,
-                cnae_principal: data.cnae_principal
+            console.log(`🔍 Consultando CNPJ (EmpresaAqui): ${mascararCNPJ(cnpjLimpo)}`);
+            result = await consultarCnpjEmpresaqui(cnpjLimpo, token, controller.signal);
+            if (result) {
+                console.log('✅ Dados obtidos via EmpresaAqui');
             }
-        });
-
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            return res.status(504).json({
-                success: false,
-                error: 'Tempo limite excedido ao consultar CNPJ.'
-            });
+        } catch (error) {
+            console.warn('⚠️ EmpresaAqui falhou:', error.name === 'AbortError' ? 'timeout' : error.message);
+            fallbackAtivo = true;
+        } finally {
+            clearTimeout(timeout);
         }
-
-        console.error('Erro ao consultar CNPJ:', error.message);
-        res.status(502).json({
-            success: false,
-            error: 'Falha de comunicação ao consultar CNPJ.'
-        });
-    } finally {
-        clearTimeout(timeout);
+    } else {
+        fallbackAtivo = true;
     }
+
+    // Tentativa 2: Fallback (BrasilAPI)
+    if (!result) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), CNPJ_API_TIMEOUT_MS);
+        try {
+            console.log(`🔍 Consultando CNPJ (BrasilAPI fallback): ${mascararCNPJ(cnpjLimpo)}`);
+            result = await consultarCnpjFallback(cnpjLimpo, controller.signal);
+            if (result) {
+                console.log('✅ Dados obtidos via BrasilAPI (fallback)');
+            }
+        } catch (error) {
+            console.warn('⚠️ BrasilAPI fallback também falhou:', error.name === 'AbortError' ? 'timeout' : error.message);
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    if (!result) {
+        return res.status(404).json({
+            success: false,
+            error: 'CNPJ não encontrado ou serviço de consulta indisponível.'
+        });
+    }
+
+    res.json({
+        success: true,
+        fallback: fallbackAtivo,
+        data: result
+    });
 });
 
 // Endpoint para salvar questionário
@@ -723,10 +733,8 @@ app.post('/api/questionario', async (req, res) => {
             'soma', 'indice_global_circularidade', 'indice_pcm'
         ];
 
-        if (hasRelatorioHtmlColumn) {
-            questionarioColumns.push('relatorio_html');
-            questionarioParams.push(relatorioHtml || null);
-        }
+        questionarioColumns.push('relatorio_html');
+        questionarioParams.push(relatorioHtml || null);
 
         const questionarioPlaceholders = questionarioParams.map((_, index) => `$${index + 1}`).join(', ');
 
