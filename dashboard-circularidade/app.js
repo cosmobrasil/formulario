@@ -1,8 +1,32 @@
 (function () {
-  const isLocal = window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
-  const API_BASE = isLocal
-    ? 'http://localhost:3000'
-    : 'https://formulario-production-8df7.up.railway.app';
+  const FETCH_TIMEOUT_MS = 15000;
+  function fetchComTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { ...options, signal: controller.signal })
+      .finally(() => clearTimeout(timer));
+  }
+  function mostrarStatus(texto, tipo) {
+    const el = document.getElementById('statusMsg');
+    if (!el) return;
+    el.textContent = texto;
+    el.className = 'status-msg' + (tipo ? ' status-' + tipo : '');
+    el.hidden = false;
+  }
+
+  const RAILWAY_API_BASE = 'https://formulario-production-8df7.up.railway.app';
+  const isLocal = window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1';
+  const isNetlify = window.location.hostname.endsWith('netlify.app');
+  const apiBaseFromQuery = new URLSearchParams(window.location.search).get('apiBase');
+  const apiBaseFromGlobal = window.__API_BASE__;
+  const apiBaseFromStorage = window.localStorage.getItem('dashboardCircularidadeApiBase');
+  const isLocalBackendHost = isLocal && window.location.port === '3000';
+  const API_BASE = apiBaseFromQuery
+    || apiBaseFromGlobal
+    || apiBaseFromStorage
+    || (isNetlify ? '' : (isLocalBackendHost ? '' : RAILWAY_API_BASE));
+
+  const STORAGE_KEY = 'dashboardCircularidadeAdminToken';
 
   const el = {
     setor: document.getElementById('filtroSetor'),
@@ -13,6 +37,7 @@
     dataFim: document.getElementById('filtroDataFim'),
     btnAtualizar: document.getElementById('btnAtualizar'),
     autoRefresh: document.getElementById('autoRefresh'),
+    adminToken: document.getElementById('adminToken'),
     kpiTotal: document.getElementById('kpiTotal'),
     kpiPontos: document.getElementById('kpiPontos'),
     kpiIGC: document.getElementById('kpiIGC'),
@@ -23,6 +48,89 @@
   const charts = {};
   let refreshTimer = null;
   let chartPluginsRegistered = false;
+
+  function getAdminToken() {
+    return el.adminToken.value.trim();
+  }
+
+  function buildHeaders(extra = {}) {
+    const headers = { ...extra };
+    const token = getAdminToken();
+    if (token) {
+      headers['x-admin-token'] = token;
+    }
+    return headers;
+  }
+
+  function paramsToQuery(obj) {
+    const p = new URLSearchParams();
+    Object.entries(obj).forEach(([k, v]) => {
+      if (v != null && String(v).trim() !== '') p.set(k, String(v).trim());
+    });
+    return p.toString();
+  }
+
+  function filtrosAtuais() {
+    return {
+      setor: el.setor.value,
+      produto: el.produto.value,
+      cidade: el.cidade.value,
+      uf: el.uf.value,
+      data_inicio: el.dataInicio.value,
+      data_fim: el.dataFim.value
+    };
+  }
+
+  async function getJSON(path, filtros = {}, options = {}) {
+    const query = paramsToQuery(filtros);
+    const url = `${API_BASE}${path}${query ? `?${query}` : ''}`;
+    const response = await fetchComTimeout(url, {
+      headers: buildHeaders(options.headers || {})
+    });
+    const contentType = (response.headers.get('content-type') || '').toLowerCase();
+    const data = contentType.includes('application/json') ? await response.json() : null;
+    if (!response.ok) {
+      const message = data && data.error ? data.error : `Erro ${response.status} em ${path}`;
+      throw new Error(message);
+    }
+    return data;
+  }
+
+  async function getText(path, filtros = {}, options = {}) {
+    const query = paramsToQuery(filtros);
+    const url = `${API_BASE}${path}${query ? `?${query}` : ''}`;
+    const response = await fetchComTimeout(url, {
+      headers: buildHeaders(options.headers || {})
+    });
+    if (!response.ok) {
+      const contentType = (response.headers.get('content-type') || '').toLowerCase();
+      let message = `Erro ${response.status} em ${path}`;
+      if (contentType.includes('application/json')) {
+        try {
+          const payload = await response.json();
+          if (payload && payload.error) message = payload.error;
+        } catch (_) {
+          /* no-op */
+        }
+      } else {
+        const body = await response.text();
+        if (body) message = body;
+      }
+      throw new Error(message);
+    }
+    return response.text();
+  }
+
+  function persistToken() {
+    sessionStorage.setItem(STORAGE_KEY, getAdminToken());
+  }
+
+  function restoreToken() {
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      el.adminToken.value = stored;
+    }
+  }
 
   function registerChartPlugins() {
     if (chartPluginsRegistered) return;
@@ -72,33 +180,6 @@
     chartPluginsRegistered = true;
   }
 
-  function paramsToQuery(obj) {
-    const p = new URLSearchParams();
-    Object.entries(obj).forEach(([k, v]) => {
-      if (v != null && String(v).trim() !== '') p.set(k, String(v).trim());
-    });
-    return p.toString();
-  }
-
-  function filtrosAtuais() {
-    return {
-      setor: el.setor.value,
-      produto: el.produto.value,
-      cidade: el.cidade.value,
-      uf: el.uf.value,
-      data_inicio: el.dataInicio.value,
-      data_fim: el.dataFim.value
-    };
-  }
-
-  async function getJSON(path, filtros = {}) {
-    const query = paramsToQuery(filtros);
-    const url = `${API_BASE}${path}${query ? `?${query}` : ''}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Erro ${response.status} em ${path}`);
-    return response.json();
-  }
-
   function preencherSelect(select, valores, placeholder) {
     const atual = select.value;
     select.innerHTML = `<option value="">${placeholder}</option>`;
@@ -114,12 +195,12 @@
   async function carregarFiltros() {
     const filtros = filtrosAtuais();
     const result = await getJSON('/api/dashboard/filters', filtros);
-    if (!result.success) return;
-    const data = result.data;
+    if (!result || !result.success) return;
+    const data = result.data || {};
     preencherSelect(el.setor, data.setores || [], 'Todos');
     preencherSelect(el.produto, data.produtos || [], 'Todos');
     preencherSelect(el.cidade, data.cidades || [], 'Todas');
-    preencherSelect(el.uf, data.ufs || [], data.hasUf ? 'Todas' : 'UF indisponível');
+    preencherSelect(el.uf, data.ufs || [], data.hasUf ? 'Todas' : 'UF indisponivel');
     el.uf.disabled = !data.hasUf;
   }
 
@@ -160,7 +241,7 @@
     registerChartPlugins();
 
     const topicos = data.topicos || {};
-    const pcmDimensoesRaw = data.pcmDimensoes || {};
+    const pcmDimensoesRaw = data.pcmDimensoes || data.cosmobIndicadores || {};
     const pcmDimensoes = {
       durabilidade: numeroSeguro(pcmDimensoesRaw.durabilidade),
       designReparavel: numeroSeguro(pcmDimensoesRaw.designReparavel),
@@ -174,12 +255,12 @@
     charts.topicos = new Chart(document.getElementById('chartTopicos'), {
       type: 'bar',
       data: {
-        labels: ['Entrada', 'Resíduos', 'Saída', 'Vida', 'Monitoramento'],
+        labels: ['Entrada', 'Residuos', 'Saida', 'Vida', 'Monitoramento'],
         datasets: [{
           label: 'Percentual (%)',
           data: [topicos.entrada, topicos.residuos, topicos.output, topicos.vida, topicos.monitoramento],
           backgroundColor: ['#22c55e', '#06b6d4', '#6366f1', '#f59e0b', '#ef4444'],
-          borderRadius: 6
+          borderRadius: 8
         }]
       },
       options: {
@@ -199,7 +280,7 @@
     charts.igc = new Chart(document.getElementById('chartIGC'), {
       type: 'doughnut',
       data: {
-        labels: ['IGC alcançado', 'Gap de melhoria'],
+        labels: ['IGC alcancado', 'Gap de melhoria'],
         datasets: [{
           data: [data.mediaIGC || 0, data.igcGap || 0],
           backgroundColor: ['#22c55e', '#334155'],
@@ -227,15 +308,15 @@
       type: 'radar',
       data: {
         labels: [
-          'Durabilidade',
-          'Design reparável',
-          'Design de reaproveitamento',
-          'Serviços no ciclo',
-          'Rastreabilidade',
-          'Transparência'
+          'Matéria-prima virgem',
+          'Matéria-prima reciclada',
+          'Matéria-prima de reaproveitamento',
+          'Matéria-prima renovável',
+          'Desmontagem no fim de vida',
+          'Circularidade no fim de vida do produto'
         ],
         datasets: [{
-          label: 'Dimensões do PCM (%)',
+          label: 'Dimensoes do PCM (%)',
           data: [
             pcmDimensoes.durabilidade,
             pcmDimensoes.designReparavel,
@@ -282,9 +363,9 @@
     charts.produto = new Chart(document.getElementById('chartCircularidadeProduto'), {
       type: 'radar',
       data: {
-        labels: ['Entrada', 'Gestão de resíduos', 'Saída do produto', 'Vida do produto', 'Monitoramento'],
+        labels: ['Entrada', 'Gestao de residuos', 'Saida do produto', 'Vida do produto', 'Monitoramento'],
         datasets: [{
-          label: 'Índice de Circularidade do Produto (%)',
+          label: 'Indice de Circularidade do Produto (%)',
           data: [topicos.entrada, topicos.residuos, topicos.output, topicos.vida, topicos.monitoramento],
           backgroundColor: 'rgba(34, 197, 94, 0.2)',
           borderColor: '#22c55e',
@@ -312,53 +393,53 @@
   function recomendacoesPorTopico(topicos) {
     const matriz = {
       entrada: {
-        icon: '📥',
-        titulo: 'ENTRADA (INPUT)',
+        icon: 'Entrada',
+        titulo: 'INPUT',
         perguntas: 'Q1',
         itens: [
-          'Explore fornecedores de matérias-primas recicladas.',
-          'Implemente aproveitamento de resíduos de outras empresas.',
-          'Priorize materiais de fontes renováveis.'
+          'Explore fornecedores de materias-primas recicladas.',
+          'Implemente aproveitamento de residuos de outras empresas.',
+          'Priorize materiais de fontes renovaveis.'
         ]
       },
       residuos: {
-        icon: '♻️',
-        titulo: 'GESTÃO DE RESÍDUOS',
+        icon: 'Residuos',
+        titulo: 'GESTAO DE RESIDUOS',
         perguntas: 'Q2',
         itens: [
-          'Desenvolva parcerias para reciclagem de resíduos.',
-          'Implemente sistema de recuperação de energia.',
-          'Reduza destinação para aterros sanitários.'
+          'Desenvolva parcerias para reciclagem de residuos.',
+          'Implemente sistema de recuperacao de energia.',
+          'Reduza destinacao para aterros sanitarios.'
         ]
       },
       output: {
-        icon: '📦',
-        titulo: 'SAÍDA DO PRODUTO (OUTPUT)',
+        icon: 'Saida',
+        titulo: 'SAIDA DO PRODUTO',
         perguntas: 'Q3, Q4, Q5',
         itens: [
           'Desenhe produtos para facilitar desmontagem.',
-          'Utilize materiais mais recicláveis.',
-          'Crie sistema de logística reversa.'
+          'Utilize materiais mais reciclaveis.',
+          'Crie sistema de logistica reversa.'
         ]
       },
       vida: {
-        icon: '🔧',
+        icon: 'Vida',
         titulo: 'VIDA DO PRODUTO',
         perguntas: 'Q6, Q7, Q8, Q9',
         itens: [
           'Invista em testes de durabilidade.',
           'Aprimore design para reparabilidade.',
-          'Crie produtos modulares e reaproveitáveis.'
+          'Crie produtos modulares e reaproveitaveis.'
         ]
       },
       monitoramento: {
-        icon: '📊',
+        icon: 'Monitoramento',
         titulo: 'MONITORAMENTO',
         perguntas: 'Q10, Q11, Q12',
         itens: [
-          'Implemente serviços pós-venda.',
+          'Implemente servicos pos-venda.',
           'Use rastreamento (QR Code, chips).',
-          'Amplie documentação e transparência.'
+          'Amplie documentacao e transparencia.'
         ]
       }
     };
@@ -371,9 +452,9 @@
         const score = Number(topicos[k] || 0);
         return `
           <article class="rec-card">
-            <h4>${rec.icon} ${rec.titulo}</h4>
+            <h4>${rec.icon} - ${rec.titulo}</h4>
             <p><strong>Perguntas:</strong> ${rec.perguntas}</p>
-            <p><strong>Pontuação do tópico:</strong> ${score}%</p>
+            <p><strong>Pontuacao do topico:</strong> ${score}%</p>
             <ul>
               ${rec.itens.map((item) => `<li>${item}</li>`).join('')}
             </ul>
@@ -387,33 +468,50 @@
     try {
       const filtros = filtrosAtuais();
       const result = await getJSON('/api/dashboard/overview', filtros);
-      if (!result.success) return;
-      const data = result.data;
+      if (!result || !result.success) return;
+      const data = result.data || {};
 
       el.kpiTotal.textContent = Number(data.totalFormularios || 0).toLocaleString('pt-BR');
       el.kpiPontos.textContent = Number(data.mediaTotalPontos || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
       el.kpiIGC.textContent = `${Number(data.mediaIGC || 0).toFixed(1)}%`;
-      el.kpiPCM.textContent = `${Number(data.mediaPCM ?? data.mediaIME ?? 0).toFixed(1)}%`;
+      el.kpiPCM.textContent = `${Number(data.mediaPCM || 0).toFixed(1)}%`;
 
       renderCharts(data);
       recomendacoesPorTopico(data.topicos || {});
+      mostrarStatus('', '');
     } catch (error) {
       console.error('Erro ao atualizar dashboard:', error);
-      alert('Falha ao atualizar dashboard. Verifique backend e filtros.');
+      mostrarStatus(error.message || 'Falha ao atualizar dashboard.', 'erro');
     }
+  }
+
+  async function atualizarTudo() {
+    mostrarStatus('Atualizando...', 'info');
+    await atualizarDashboard();
+
+    const resultados = await Promise.allSettled([carregarFiltros()]);
+
+    resultados.forEach((resultado) => {
+      if (resultado.status === 'rejected') {
+        console.warn('Falha ao atualizar parte do painel:', resultado.reason);
+      }
+    });
   }
 
   function configurarEventos() {
     el.btnAtualizar.addEventListener('click', async () => {
-      await atualizarDashboard();
-      await carregarFiltros();
+      await atualizarTudo();
     });
 
     [el.setor, el.produto, el.cidade, el.uf, el.dataInicio, el.dataFim].forEach((input) => {
       input.addEventListener('change', async () => {
         await atualizarDashboard();
-        await carregarFiltros();
+        await Promise.allSettled([carregarFiltros()]);
       });
+    });
+
+    el.adminToken.addEventListener('input', () => {
+      persistToken();
     });
 
     el.autoRefresh.addEventListener('change', () => {
@@ -421,19 +519,19 @@
         clearInterval(refreshTimer);
         refreshTimer = null;
       }
+
       if (el.autoRefresh.checked) {
         refreshTimer = setInterval(async () => {
           await atualizarDashboard();
-          await carregarFiltros();
         }, 60000);
       }
     });
   }
 
   async function init() {
+    restoreToken();
     configurarEventos();
-    await atualizarDashboard();
-    await carregarFiltros();
+    await atualizarTudo();
   }
 
   init();

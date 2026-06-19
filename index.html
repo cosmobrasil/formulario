@@ -1,223 +1,305 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Questionário de Circularidade 2.0 - CosmoBrasil 2026</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="style-2026.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel de Relatórios</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #131d31;
+      --line: #24314f;
+      --text: #e6efff;
+      --muted: #9fb0cf;
+      --accent: #1d9bf0;
+      --ok: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 20% 10%, #182846 0%, #0b1220 50%);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; }
+    .wrap.locked { display: none; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    .sub { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+    input, button {
+      background: #0d1728;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+    input { min-width: 220px; }
+    button { cursor: pointer; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .meta {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { font-size: 12px; color: var(--muted); }
+    td .small { color: var(--muted); font-size: 12px; }
+    .actions { display: flex; gap: 6px; }
+    .actions a {
+      text-decoration: none;
+      color: #fff;
+      background: #1f2c46;
+      border: 1px solid #31476f;
+      padding: 6px 9px;
+      border-radius: 7px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .actions a.download { background: var(--ok); border-color: #16a34a; }
+    .status { color: var(--muted); padding: 14px; font-size: 13px; }
+    .gate {
+      min-height: calc(100vh - 48px);
+      display: grid;
+      place-items: center;
+    }
+    .gate-card {
+      width: min(480px, 100%);
+      background: rgba(19, 29, 49, 0.96);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+    }
+    .gate-card h1 { font-size: 26px; }
+    .gate-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+    .gate-form {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    .gate-form input {
+      flex: 1 1 240px;
+      min-width: 0;
+    }
+    .gate-error {
+      min-height: 20px;
+      margin-top: 12px;
+      color: #fca5a5;
+      font-size: 13px;
+    }
+  </style>
 </head>
+<body>
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <h1>Painel de Relatórios</h1>
+      <p>Digite a senha de acesso para abrir o painel e carregar a lista de respostas.</p>
+      <form id="gateForm" class="gate-form">
+        <input id="gatePassword" type="password" placeholder="Senha de acesso" autocomplete="current-password" />
+        <button class="primary" type="submit">Entrar</button>
+      </form>
+      <div id="gateError" class="gate-error" aria-live="polite"></div>
+    </div>
+  </div>
+  <div class="wrap locked">
+    <h1>Painel de Usuários e Relatórios</h1>
+    <p class="sub">Lista de respostas do formulário com acesso para visualizar ou baixar o relatório HTML individual.</p>
 
-<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
+    <div class="toolbar">
+      <button class="primary" id="loadBtn">Atualizar Lista</button>
+    </div>
 
-    <!-- Header -->
-    <header class="bg-white shadow-md">
-        <div class="max-w-6xl mx-auto px-6 py-4">
-            <div class="flex items-center gap-4">
-                <img src="logo.png" alt="Logo" class="h-12 w-auto object-contain">
-                <div class="h-8 w-px bg-gray-300"></div>
-                <div class="text-2xl font-bold text-orange-600">CosmoBrasil 2.0</div>
-                <div class="h-8 w-px bg-gray-300"></div>
-                <div class="text-sm text-gray-600">Pré-Diagnóstico de Circularidade 2026</div>
-            </div>
-        </div>
-    </header>
+    <div class="card">
+      <div class="meta">
+        Total de respostas: <strong id="total">0</strong>
+      </div>
+      <div id="status" class="status">Carregando dados...</div>
+      <table id="table" hidden>
+        <thead>
+          <tr>
+            <th>Responsável / Empresa</th>
+            <th>Cidade</th>
+            <th>Produto</th>
+            <th>Data e Hora</th>
+            <th>IGC / PCM</th>
+            <th>Relatório HTML</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
 
-    <!-- Main Content -->
-    <main class="max-w-6xl mx-auto px-6 py-8">
+  <script>
+    (function () {
+      const API_BASE_DEFAULT = 'https://formulario-production-8df7.up.railway.app';
 
-        <!-- Tela de Termos de Uso -->
-        <div id="termosScreen" class="termos-container">
-            <div class="bg-white rounded-xl shadow-2xl p-8 max-w-4xl mx-auto">
-                <h1 class="text-3xl font-bold text-gray-900 mb-2">Pré-Diagnóstico sobre Circularidade de Produtos 2.0 -
-                    2026</h1>
-                <p class="text-sm text-gray-600 mb-8">📋 12 Questões • 🎯 4 Categorias • ⏱️ 10-15 min</p>
+      function resolveApiBase() {
+        const params = new URLSearchParams(window.location.search);
+        const explicitBase = params.get('apiBase') || window.__API_BASE__;
+        if (explicitBase) return explicitBase;
 
-                <div class="bg-orange-50 border-l-4 border-orange-500 p-4 mb-6">
-                    <h2 class="text-lg font-bold text-orange-900 mb-3">TERMOS DE USO</h2>
+        const storedBase = window.localStorage.getItem('dashboardReportsApiBase');
+        if (storedBase) return storedBase;
 
-                    <div class="space-y-4 text-sm text-gray-700">
-                        <div>
-                            <h3 class="font-bold text-gray-900 mb-1">1. Limitações Legais</h3>
-                            <p>Este pré-diagnóstico não possui valor legal e não pode ser utilizado como ferramenta de
-                                certificação formal. Os resultados não constituem certificação oficial nem garantem
-                                conformidade com regulamentações específicas.</p>
-                        </div>
+        const isLocal = location.hostname.includes('localhost') || location.hostname === '127.0.0.1';
+        const isNetlify = location.hostname.endsWith('netlify.app');
+        return isLocal ? 'http://localhost:3000' : (isNetlify ? '' : API_BASE_DEFAULT);
+      }
 
-                        <div>
-                            <h3 class="font-bold text-gray-900 mb-1">2. Finalidade</h3>
-                            <p>A finalidade é orientar as empresas na identificação de possíveis melhorias em seus
-                                processos de produção e práticas empresariais, fornecendo insights para desenvolvimento
-                                sustentável.</p>
-                        </div>
+      const FETCH_TIMEOUT_MS = 15000;
+      function fetchComTimeout(url, options) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+        return fetch(url, { ...options, signal: controller.signal })
+          .finally(() => clearTimeout(timer));
+      }
+      async function fetchJson(url) {
+        const response = await fetchComTimeout(url);
+        const ct = (response.headers.get('content-type') || '').toLowerCase();
+        const data = ct.includes('application/json') ? await response.json() : null;
+        if (!response.ok || !data) {
+          throw new Error(data && data.error ? data.error : `Erro ${response.status}`);
+        }
+        return data;
+      }
 
-                        <div>
-                            <h3 class="font-bold text-gray-900 mb-1">3. Base Metodológica</h3>
-                            <p>O objetivo principal do pré-diagnóstico é medir o grau de circularidade de um produto,
-                                com base em indicadores internacionais. A fonte dos indicadores internacionais pertence
-                                ao Centro Tecnológico Cosmob localizado na Itália.</p>
-                        </div>
+      const API_BASE = resolveApiBase();
+      const ADMIN_PASSWORD = 'Cosmob2026@';
 
-                        <div>
-                            <h3 class="font-bold text-gray-900 mb-1">Privacidade dos Dados</h3>
-                            <ul class="list-disc list-inside space-y-1 ml-4">
-                                <li>Os dados fornecidos são tratados com confidencialidade</li>
-                                <li>Informações da empresa não são compartilhadas individualmente</li>
-                                <li>Apenas dados agregados e anônimos são utilizados em análises</li>
-                                <li>Você pode solicitar a exclusão dos seus dados a qualquer momento</li>
-                            </ul>
-                        </div>
+      const gate = document.getElementById('gate');
+      const gateForm = document.getElementById('gateForm');
+      const gatePassword = document.getElementById('gatePassword');
+      const gateError = document.getElementById('gateError');
+      const wrap = document.querySelector('.wrap');
+      const loadBtn = document.getElementById('loadBtn');
+      const total = document.getElementById('total');
+      const status = document.getElementById('status');
+      const table = document.getElementById('table');
+      const rows = document.getElementById('rows');
 
-                        <div class="bg-yellow-50 border border-yellow-200 rounded p-3 mt-4">
-                            <p class="text-xs text-yellow-800"><strong>Responsabilidades:</strong> CosmoBrasil não se
-                                responsabiliza por decisões tomadas. Usuário deve validar informações com especialistas.
-                            </p>
-                        </div>
-                    </div>
+      function getTokenQuery() {
+        return `token=${encodeURIComponent(ADMIN_PASSWORD)}`;
+      }
 
-                    <div class="mt-6 p-4 bg-gray-50 rounded-lg">
-                        <label class="flex items-start gap-3 cursor-pointer">
-                            <input type="checkbox" id="aceitarTermos" class="mt-1 accent-orange-600">
-                            <span class="text-sm text-gray-700">
-                                <strong>Declaração de Aceite:</strong> Declaro que li, compreendi e aceito todos os
-                                termos de uso acima descritos.
-                                Ao marcar esta opção, confirmo que entendo as limitações deste diagnóstico e que os
-                                resultados serão utilizados apenas para orientação interna da empresa.
-                            </span>
-                        </label>
-                    </div>
+      function buildHtmlUrl(id, download) {
+        const q = new URLSearchParams();
+        q.set('token', ADMIN_PASSWORD);
+        if (download) q.set('download', '1');
+        const qs = q.toString();
+        return `${API_BASE}/api/admin/respostas/${id}/html${qs ? `?${qs}` : ''}`;
+      }
 
-                    <div class="mt-6 flex justify-end">
-                        <button id="btnContinuar" disabled
-                            class="px-6 py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                            Continuar com o Questionário →
-                        </button>
-                    </div>
+      function setLocked(locked) {
+        gate.hidden = !locked;
+        wrap.classList.toggle('locked', locked);
+        document.body.style.overflow = locked ? 'hidden' : '';
+      }
+
+      function unlock(token) {
+        if (token !== ADMIN_PASSWORD) {
+          throw new Error('Senha inválida.');
+        }
+
+        setLocked(false);
+      }
+
+      async function carregar() {
+        status.hidden = false;
+        status.textContent = 'Carregando dados...';
+        table.hidden = true;
+        rows.innerHTML = '';
+
+        const qs = getTokenQuery();
+        const url = `${API_BASE}/api/admin/respostas${qs ? `?${qs}` : ''}`;
+
+        try {
+          const data = await fetchJson(url);
+
+          if (!data.success) {
+            throw new Error(data.error || 'Falha ao carregar lista.');
+          }
+
+          const lista = data.data || [];
+          total.textContent = String(lista.length);
+
+          if (!lista.length) {
+            status.textContent = 'Nenhuma resposta encontrada.';
+            return;
+          }
+
+          lista.forEach((item) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>
+                <div>${item.nomeResponsavel || '-'}</div>
+                <div class="small">${item.nomeEmpresa || '-'}</div>
+              </td>
+              <td>${item.cidade || '-'}${item.uf ? `/${item.uf}` : ''}</td>
+              <td>${item.produto || '-'}</td>
+              <td>${item.dataHora || '-'}</td>
+              <td>${Number(item.igc || 0).toFixed(1)}% / ${Number(item.pcm ?? item.ime ?? 0).toFixed(1)}%</td>
+              <td>
+                <div class="actions">
+                  <a href="${buildHtmlUrl(item.id, false)}" target="_blank" rel="noopener noreferrer">Visualizar</a>
+                  <a class="download" href="${buildHtmlUrl(item.id, true)}" target="_blank" rel="noopener noreferrer">Baixar</a>
                 </div>
-            </div>
-        </div>
+              </td>
+            `;
+            rows.appendChild(tr);
+          });
 
-        <!-- Tela de Identificação da Empresa -->
-        <div id="identificacaoScreen" class="hidden">
-            <div class="bg-white rounded-xl shadow-2xl p-8 max-w-3xl mx-auto">
-                <h2 class="text-2xl font-bold text-gray-900 mb-6">Informações da Empresa</h2>
+          status.hidden = true;
+          table.hidden = false;
+        } catch (error) {
+          status.textContent = `Erro: ${error.message}`;
+          table.hidden = true;
+        }
+      }
 
-                <form id="formIdentificacao" class="space-y-5">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Nome da Empresa</label>
-                        <input type="text" id="nomeEmpresa"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                    </div>
+      loadBtn.addEventListener('click', carregar);
+      gateForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        gateError.textContent = '';
 
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">CNPJ</label>
-                        <div class="flex gap-2">
-                            <input type="text" id="cnpj" inputmode="numeric" maxlength="18"
-                                placeholder="Pode digitar com pontos/traço (14 dígitos)" title="Informe um CNPJ com 14 dígitos (pontuação opcional)"
-                                class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                            <button type="button" id="btnConsultarCNPJ"
-                                class="px-4 py-2 bg-slate-800 text-white font-semibold rounded-lg hover:bg-slate-900 transition-colors">
-                                Consultar
-                            </button>
-                        </div>
-                        <p id="feedbackCNPJ" class="text-xs mt-1 hidden"></p>
-                    </div>
+        const token = gatePassword.value.trim();
+        if (!token) {
+          gateError.textContent = 'Digite a senha de acesso.';
+          return;
+        }
 
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Nome do Responsável</label>
-                        <input type="text" id="nomeResponsavel"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                    </div>
+        try {
+          unlock(token);
+          await carregar();
+        } catch (error) {
+          gateError.textContent = error.message || 'Não foi possível validar a senha.';
+          setLocked(true);
+        }
+      });
 
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Cidade</label>
-                        <input type="text" id="cidade" placeholder="Ex: São Paulo, Rio de Janeiro..."
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Celular</label>
-                        <input type="tel" id="celular" inputmode="numeric"
-                            maxlength="11" placeholder="Ex: 11999999999"
-                            title="Informe seu número de celular (DDD + número)"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">E-mail</label>
-                        <input type="email" id="email"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Setor Econômico</label>
-                        <select id="setorEconomico"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white">
-                            <option value="" disabled selected>Selecione um setor</option>
-                            <option>Indústria</option>
-                            <option>Comércio</option>
-                            <option>Serviços</option>
-                            <option>Agropecuária</option>
-                            <option>Construção Civil</option>
-                            <option>Tecnologia da Informação</option>
-                            <option>Saúde</option>
-                            <option>Educação</option>
-                            <option>Madeira e Móveis</option>
-                            <option>Transporte e Logística</option>
-                            <option>Outro</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Produto Avaliado</label>
-                        <input type="text" id="produtoAvaliado"
-                            placeholder="Ex: chapéu, boné, camiseta, avental..."
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                        <p class="text-xs text-gray-500 mt-1">Escolha um produto da sua empresa para medir o "Grau de
-                            Competitividade na Economia Circular"</p>
-                    </div>
-
-                    <div class="flex justify-between mt-8">
-                        <button type="button" id="btnVoltarTermos"
-                            class="px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition-colors">
-                            ← Voltar
-                        </button>
-                        <button type="submit"
-                            class="px-6 py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition-colors">
-                            Próximo: Questionário →
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Tela do Questionário -->
-        <div id="questionarioScreen" class="hidden">
-            <!-- Será preenchida dinamicamente -->
-        </div>
-
-        <!-- Tela de Confirmação -->
-        <div id="confirmacaoScreen" class="hidden">
-            <!-- Será preenchida dinamicamente -->
-        </div>
-
-        <!-- Tela de Relatório -->
-        <div id="relatorioScreen" class="hidden">
-            <!-- Será preenchida dinamicamente -->
-        </div>
-
-    </main>
-
-    <footer class="mt-12 text-center text-gray-400 text-sm py-6">
-        <p>© 2025 CosmoBrasil - Centro Tecnológico de Economia Circular</p>
-    </footer>
-
-    <!-- Configuração PostgreSQL e aplicação -->
-    <script src="config-postgres.js"></script>
-    <script src="config.js?v=cb11"></script>
-    <script src="google-drive-silent.js"></script>
-    <script src="app-postgres.js?v=cb12"></script>
+      setLocked(true);
+    })();
+  </script>
 </body>
-
 </html>
